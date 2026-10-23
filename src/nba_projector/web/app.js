@@ -20,8 +20,8 @@ function categoryCell(category, row) {
   return td;
 }
 
-function extraCell(text) {
-  return cell("extra", text);
+function extraCell(text, className = "extra") {
+  return cell(className, text);
 }
 
 function renderRow(row) {
@@ -31,13 +31,13 @@ function renderRow(row) {
     cell("rank", String(row.rank)),
     trendCell(row),
     cell("player", row.player_name),
-    extraCell(stats && stats.games_played !== null ? String(stats.games_played) : "–"),
-    extraCell(stats ? stats.minutes.toFixed(1) : "–"),
+    extraCell(stats && stats.games_played !== null ? String(stats.games_played) : "–", "extra minor"),
+    extraCell(stats ? stats.minutes.toFixed(1) : "–", "extra minor"),
   );
   for (const category of CATEGORIES) {
     tr.append(categoryCell(category, row));
-    if (category === "fg_pct") tr.append(extraCell(stats ? stats.fga.toFixed(1) : "–"));
-    if (category === "ft_pct") tr.append(extraCell(stats ? stats.fta.toFixed(1) : "–"));
+    if (category === "fg_pct") tr.append(extraCell(stats ? stats.fga.toFixed(1) : "–", "extra volume"));
+    if (category === "ft_pct") tr.append(extraCell(stats ? stats.fta.toFixed(1) : "–", "extra volume"));
   }
   const total = zCell(row.total);
   total.classList.add("total");

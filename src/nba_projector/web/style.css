@@ -129,7 +129,7 @@ table {
 
 th,
 td {
-  padding: 7px 10px;
+  padding: 6px 8px;
   border-bottom: 1px solid var(--line);
   text-align: right;
   white-space: nowrap;
@@ -377,5 +377,30 @@ td.extra {
 @media (max-width: 600px) {
   .controls {
     width: 100%;
+  }
+}
+
+/* Keep the Total column in view when the table is wider than the page. */
+.table-wrap thead th:last-child,
+.table-wrap td.total {
+  position: sticky;
+  right: 0;
+  box-shadow: -1px 0 0 var(--line);
+}
+
+.table-wrap thead th:last-child {
+  z-index: 3;
+}
+
+/* Drop the lowest-value columns first on narrower screens. */
+@media (max-width: 1180px) {
+  .volume {
+    display: none;
+  }
+}
+
+@media (max-width: 960px) {
+  .minor {
+    display: none;
   }
 }
