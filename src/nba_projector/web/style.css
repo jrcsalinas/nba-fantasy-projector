@@ -9,6 +9,7 @@
   --bad: #d14343;
   --good-ink: #0c7a45;
   --bad-ink: #b02a2a;
+  --gutter: clamp(16px, 2vw, 32px);
   color-scheme: light;
 }
 
@@ -41,9 +42,7 @@ body {
 }
 
 main {
-  max-width: 1120px;
-  margin: 0 auto;
-  padding: 24px 16px 8px;
+  padding: 24px var(--gutter) 8px;
 }
 
 .page-head {
@@ -215,9 +214,7 @@ td.total {
 }
 
 footer {
-  max-width: 1120px;
-  margin: 0 auto;
-  padding: 16px 16px 32px;
+  padding: 16px var(--gutter) 32px;
   color: var(--muted);
   font-size: 0.875rem;
 }
