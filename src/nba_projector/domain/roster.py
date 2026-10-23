@@ -1,8 +1,30 @@
 """Pure roster math: team category totals, weak categories, and waiver candidates."""
 
 from collections.abc import Collection, Mapping, Sequence
+from dataclasses import dataclass
 
 from nba_projector.domain.models import Category, RankedPlayer
+
+
+@dataclass(frozen=True)
+class RosterPlayer:
+    """A rostered player; ``player_id`` is the upstream id, ``name`` is for readability."""
+
+    player_id: int
+    name: str
+
+
+@dataclass(frozen=True)
+class Roster:
+    """My team: active players plus those on the injured list."""
+
+    active: tuple[RosterPlayer, ...]
+    il: tuple[RosterPlayer, ...] = ()
+
+    @property
+    def ids(self) -> set[int]:
+        """Every rostered ``player_id``, including IL."""
+        return {p.player_id for p in (*self.active, *self.il)}
 
 
 def team_totals(players: Sequence[RankedPlayer]) -> dict[Category, float]:

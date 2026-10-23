@@ -16,6 +16,7 @@ class Settings(BaseSettings):
 
     db_path: Path = Path("data/projector.db")
     raw_dir: Path = Path("data/raw")
+    roster_path: Path = Path("data/roster.json")
 
 
 @lru_cache
