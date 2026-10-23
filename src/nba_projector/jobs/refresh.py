@@ -8,19 +8,17 @@ import logging
 import time
 from collections.abc import Callable, Sequence
 from datetime import UTC, date, datetime, timedelta
-from zoneinfo import ZoneInfo
 
 from nba_projector.adapters.nba_api_provider import NbaApiProvider
 from nba_projector.adapters.provider import DataProvider, ScheduledGame
 from nba_projector.adapters.repository import Repository
-from nba_projector.config import get_settings
+from nba_projector.config import EASTERN, get_settings
 from nba_projector.domain.models import GameLog, PlayerAverages, RankedPlayer, Window
 from nba_projector.domain.ranking import MIN_GAMES, MIN_MINUTES_PG, rank_players
 from nba_projector.domain.windows import average_logs, blend_with_prior, season_for
 
 logger = logging.getLogger(__name__)
 
-EASTERN = ZoneInfo("America/New_York")
 _UNDERWAY_GAMES = 5
 
 

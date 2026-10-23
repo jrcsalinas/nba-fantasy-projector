@@ -2,8 +2,11 @@
 
 from functools import lru_cache
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+EASTERN = ZoneInfo("America/New_York")
 
 
 class Settings(BaseSettings):
