@@ -1,9 +1,9 @@
 """Pure 9-category z-score ranking."""
 
 import math
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 
-from nba_projector.domain.models import Category, PlayerAverages, RankedPlayer, Window
+from nba_projector.domain.models import Category, PlayerAverages, RankedPlayer, Trend, Window
 
 MIN_GAMES: dict[Window, int] = {Window.SEASON: 10, Window.LAST_15: 5, Window.LAST_30: 10}
 MIN_MINUTES_PG = 12.0
@@ -50,6 +50,27 @@ def _assign_ranks(
     """Rank ids by ``score`` descending; ties go to overall rank, then player id."""
     ordered = sorted(ids, key=lambda i: (-score(i), overall_rank[i] if overall_rank else 0, i))
     return {player_id: position for position, player_id in enumerate(ordered, start=1)}
+
+
+def compute_trends(
+    today: Mapping[int, int], previous: Mapping[int, int] | None
+) -> dict[int, Trend]:
+    """Compare today's ranks with a previous snapshot's ranks.
+
+    Args:
+        today: ``player_id`` to rank today.
+        previous: ``player_id`` to rank in the previous snapshot, or ``None`` if none exists.
+
+    Returns:
+        ``player_id`` to ``Trend``. Without a previous snapshot every change is ``None``;
+        a player missing from it is flagged new.
+    """
+    if previous is None:
+        return {pid: Trend(None, False) for pid in today}
+    return {
+        pid: Trend(previous[pid] - rank, False) if pid in previous else Trend(None, True)
+        for pid, rank in today.items()
+    }
 
 
 def rank_players(

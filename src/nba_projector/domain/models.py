@@ -83,3 +83,11 @@ class RankedPlayer:
     z: dict[Category, float]
     total: float
     ranks: dict[str, int]
+
+
+@dataclass(frozen=True)
+class Trend:
+    """Rank movement versus a previous snapshot; positive ``change`` means moved up."""
+
+    change: int | None
+    is_new: bool
