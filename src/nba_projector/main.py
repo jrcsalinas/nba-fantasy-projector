@@ -25,3 +25,9 @@ app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
 def dashboard() -> FileResponse:
     """Serve the rankings dashboard page."""
     return FileResponse(WEB_DIR / "index.html")
+
+
+@app.get("/roster", include_in_schema=False)
+def roster_page() -> FileResponse:
+    """Serve the my roster page."""
+    return FileResponse(WEB_DIR / "roster.html")

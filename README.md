@@ -7,7 +7,9 @@ Projections, draft rankings, and lineup advice for NBA Fantasy.
 A FastAPI backend and web page that help fantasy basketball players make decisions. Today it
 ships a **trending players dashboard**: a 9-category ranking (PTS, REB, AST, STL, BLK, 3PM, FG%,
 FT%, TO) over the season, the last 15 days, or the last 30 days, with each player's rank change
-since the previous snapshot. Rankings are statistical estimates, not guarantees.
+since the previous snapshot. A second tab, **My roster** (`/roster`), shows only your players, a
+team row with your weakest categories, and waiver suggestions for them. Rankings are statistical
+estimates, not guarantees.
 
 ## Quick start
 
@@ -18,6 +20,9 @@ uv run uvicorn nba_projector.main:app --reload
 ```
 
 Then open <http://127.0.0.1:8000/>. The API docs are at <http://127.0.0.1:8000/docs>.
+
+For the My roster tab, copy `roster.example.json` to `data/roster.json` and list your players
+(see [My roster](#my-roster)).
 
 If the date has no games the job writes nothing; pass `--date YYYY-MM-DD` with a past game date.
 Last 15 and Last 30 stay empty early in the season until players reach the minimum games.
@@ -30,6 +35,7 @@ Copy `.env.example` to `.env` to override the defaults.
 | --- | --- | --- |
 | `NBA_PROJECTOR_DB_PATH` | `data/projector.db` | SQLite database file |
 | `NBA_PROJECTOR_RAW_DIR` | `data/raw` | Raw `nba_api` responses, kept apart from cleaned data |
+| `NBA_PROJECTOR_ROSTER_PATH` | `data/roster.json` | Your roster file for the My roster tab |
 
 ## Usage
 
@@ -43,6 +49,34 @@ curl "http://127.0.0.1:8000/api/v1/rankings?window=l15&sort=pts&limit=10"
 
 The endpoint reads saved snapshots only and never calls `nba_api`. It returns 404 until the first
 refresh has run.
+
+## My roster
+
+Open <http://127.0.0.1:8000/roster>. Put your players in `data/roster.json` (the `data/` folder is
+gitignored, so the roster stays local). Players are matched by `player_id`; `name` is only for
+readability, and `il` is optional:
+
+```json
+{
+  "active": [{"player_id": 1630178, "name": "Tyrese Maxey"}],
+  "il": [{"player_id": 1629632, "name": "Coby White"}]
+}
+```
+
+Find a `player_id` in the rankings API (`/api/v1/rankings`) or on a player's page at nba.com. The
+file is re-read on every request, so edits show up on reload.
+
+- The team row sums the z-scores of your active players; IL players are left out. Outlined cells
+  are your three weakest categories.
+- A player below the games or minutes threshold in a window shows as "Not ranked in this window".
+- Waiver suggestions list the best players per weak category who are not on your roster and rank
+  below a cutoff overall (default 150, adjustable on the page). That is an **estimate** of who is
+  available, not your league's actual free agents.
+
+```powershell
+curl "http://127.0.0.1:8000/api/v1/roster?window=season&sort=overall"
+curl "http://127.0.0.1:8000/api/v1/roster/waivers?cutoff=150&limit=5"
+```
 
 ## Daily refresh
 
@@ -70,13 +104,13 @@ Use the machine's US Eastern time, or adjust the hour.
 
 ```
 src/nba_projector/
-  main.py      # FastAPI app; serves the page and static files
+  main.py      # FastAPI app; serves the pages and static files
   config.py    # settings from environment variables
-  api/         # rankings route, schemas, and row building
-  adapters/    # DataProvider protocol, nba_api provider, SQLite repository
-  domain/      # pure models, window averaging, and 9-cat ranking math
+  api/         # rankings and roster routes, schemas, row building
+  adapters/    # DataProvider protocol, nba_api provider, SQLite repository, roster file
+  domain/      # pure models, window averaging, 9-cat ranking math, roster math
   jobs/        # daily refresh job
-  web/         # index.html, app.js, style.css
+  web/         # dashboard and roster pages: HTML, JS, CSS
 tests/         # mirrors src/; fixtures in tests/fixtures/
 ```
 

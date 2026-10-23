@@ -1,8 +1,5 @@
 "use strict";
 
-const CATEGORIES = ["pts", "reb", "ast", "stl", "blk", "fg3m", "fg_pct", "ft_pct", "tov"];
-const HEAT_SATURATION_Z = 3;
-
 const state = { window: "season", sort: "overall" };
 let requestId = 0;
 
@@ -13,41 +10,6 @@ const els = {
   tableWrap: document.getElementById("table-wrap"),
   rows: document.getElementById("rows"),
 };
-
-function cell(className, text) {
-  const td = document.createElement("td");
-  if (className) td.className = className;
-  td.textContent = text;
-  return td;
-}
-
-function trendCell(row) {
-  const td = cell("", "–");
-  td.className = "trend-flat";
-  if (row.is_new) {
-    td.textContent = "new";
-  } else if (row.trend > 0) {
-    td.textContent = `▲ ${row.trend}`;
-    td.className = "trend-up";
-  } else if (row.trend < 0) {
-    td.textContent = `▼ ${Math.abs(row.trend)}`;
-    td.className = "trend-down";
-  } else if (row.trend === 0) {
-    td.textContent = "0";
-  }
-  return td;
-}
-
-function formatZ(z) {
-  const text = z.toFixed(1);
-  return text === "-0.0" ? "0.0" : text;
-}
-
-function zCell(z) {
-  const td = cell(z >= 0.05 ? "pos" : z <= -0.05 ? "neg" : "", formatZ(z));
-  td.style.setProperty("--heat", Math.min(Math.abs(z) / HEAT_SATURATION_Z, 1).toFixed(2));
-  return td;
-}
 
 function renderRow(row) {
   const tr = document.createElement("tr");

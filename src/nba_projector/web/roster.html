@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>My Roster</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/shared.js" defer></script>
+  <script src="/static/roster.js" defer></script>
+</head>
+<body>
+  <main>
+    <nav class="tabs" aria-label="Pages">
+      <a href="/">Rankings</a>
+      <a href="/roster" aria-current="page">My roster</a>
+    </nav>
+
+    <header class="page-head">
+      <div>
+        <h1>My roster</h1>
+        <p class="as-of" id="as-of" aria-live="polite">Loading…</p>
+      </div>
+      <div class="windows" role="group" aria-label="Stat window">
+        <button type="button" data-window="season" aria-pressed="true">Season</button>
+        <button type="button" data-window="l15" aria-pressed="false">Last 15 days</button>
+        <button type="button" data-window="l30" aria-pressed="false">Last 30 days</button>
+      </div>
+    </header>
+
+    <p class="notice" id="stale" role="status" hidden></p>
+    <p class="message" id="message" role="status" hidden></p>
+
+    <div class="table-wrap" id="table-wrap">
+      <table>
+        <caption class="sr-only">
+          My players with nine-category z-scores. The team row sums active players; outlined
+          cells are my weakest categories.
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col"><button type="button" data-sort="overall">Rank</button></th>
+            <th scope="col">Trend</th>
+            <th scope="col" class="player">Player</th>
+            <th scope="col"><button type="button" data-sort="pts">PTS</button></th>
+            <th scope="col"><button type="button" data-sort="reb">REB</button></th>
+            <th scope="col"><button type="button" data-sort="ast">AST</button></th>
+            <th scope="col"><button type="button" data-sort="stl">STL</button></th>
+            <th scope="col"><button type="button" data-sort="blk">BLK</button></th>
+            <th scope="col"><button type="button" data-sort="fg3m">3PM</button></th>
+            <th scope="col"><button type="button" data-sort="fg_pct">FG%</button></th>
+            <th scope="col"><button type="button" data-sort="ft_pct">FT%</button></th>
+            <th scope="col">
+              <button type="button" data-sort="tov" title="Fewer turnovers score higher">TO</button>
+            </th>
+            <th scope="col"><button type="button" data-sort="overall">Total</button></th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+
+    <section class="waivers" id="waivers" hidden>
+      <div class="section-head">
+        <div>
+          <h2>Waiver suggestions</h2>
+          <p class="as-of" id="waiver-note"></p>
+        </div>
+        <label class="cutoff">
+          Likely available: ranked below
+          <input type="number" id="cutoff" min="1" max="500" value="150" inputmode="numeric">
+        </label>
+      </div>
+      <p class="message" id="waiver-message" role="status" hidden></p>
+      <div class="waiver-groups" id="waiver-groups"></div>
+    </section>
+  </main>
+
+  <footer>
+    <p>Rankings are statistical estimates, not guarantees.</p>
+  </footer>
+</body>
+</html>
