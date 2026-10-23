@@ -1,6 +1,6 @@
 import logging
 from collections.abc import Callable, Sequence
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 
 import pytest
@@ -13,6 +13,7 @@ from nba_projector.jobs.refresh import (
     build_snapshots,
     refresh_deadline,
     refresh_latest,
+    run_daily,
     run_refresh,
 )
 
@@ -323,3 +324,69 @@ def test_cli_accepts_latest_date_and_no_wait() -> None:
 def test_cli_rejects_latest_together_with_date() -> None:
     with pytest.raises(SystemExit):
         _parse_args(["--latest", "--date", "2026-10-22"])
+
+
+def evening_games(game_date: date, *, final: bool = True) -> list[ScheduledGame]:
+    start = datetime.combine(game_date, time(23, 0), tzinfo=UTC)
+    return [ScheduledGame(f"g-{game_date}", start, final)]
+
+
+class DailyProvider(FakeProvider):
+    """A provider with one 7pm Eastern game on each date in ``game_dates``."""
+
+    def __init__(self, logs: dict[str, list[GameLog]], game_dates: set[date]) -> None:
+        super().__init__(logs, final_games)
+        self.game_dates = game_dates
+        self.failures_left = 0
+
+    def fetch_schedule(self, game_date: date) -> list[ScheduledGame]:
+        return evening_games(game_date) if game_date in self.game_dates else []
+
+    def fetch_game_logs(self, season: str) -> list[GameLog]:
+        if self.failures_left > 0:
+            self.failures_left -= 1
+            raise RuntimeError("network down")
+        return super().fetch_game_logs(season)
+
+
+def test_run_daily_updates_once_per_day_after_each_days_games(repo: Repository) -> None:
+    day_one, day_two = date(2026, 10, 23), date(2026, 10, 24)
+    clock = FakeClock(datetime(2026, 10, 23, 15, 0, tzinfo=UTC))  # 11am Eastern on day one
+    provider = DailyProvider({CURRENT: pool(CURRENT, date(2026, 10, 1), 12)}, {day_one, day_two})
+
+    run_daily(provider, repo, now=clock.now, sleep=clock.sleep, stop_after=2)
+
+    assert repo.snapshot_dates(Window.SEASON, limit=5) == [day_two, day_one]
+    # Day one: wait from 11am Eastern until 3 hours after the 7pm Eastern game starts.
+    assert clock.sleeps[0] == 11 * 3600
+
+
+def test_run_daily_sleeps_until_the_next_eastern_day_when_there_are_no_games(
+    repo: Repository,
+) -> None:
+    clock = FakeClock(datetime(2026, 10, 23, 15, 0, tzinfo=UTC))  # 11am Eastern
+    provider = DailyProvider({}, set())
+
+    run_daily(provider, repo, now=clock.now, sleep=clock.sleep, stop_after=1)
+
+    assert clock.sleeps == [13 * 3600]  # until midnight Eastern
+    assert repo.snapshot_dates(Window.SEASON) == []
+
+
+def test_run_daily_retries_after_a_failure_and_keeps_the_last_snapshot(repo: Repository) -> None:
+    day = date(2026, 10, 23)
+    clock = FakeClock(datetime(2026, 10, 24, 3, 0, tzinfo=UTC))  # 11pm Eastern; games over
+    provider = DailyProvider({CURRENT: pool(CURRENT, date(2026, 10, 1), 12)}, {day})
+    provider.failures_left = 1
+
+    run_daily(provider, repo, now=clock.now, sleep=clock.sleep, retry_seconds=900, stop_after=2)
+
+    assert 900 in clock.sleeps
+    assert repo.snapshot_dates(Window.SEASON, limit=5) == [day]
+
+
+def test_cli_daemon_flag_is_exclusive_with_date_and_latest() -> None:
+    assert _parse_args(["--daemon"]).daemon is True
+    for other in (["--date", "2026-10-22"], ["--latest"]):
+        with pytest.raises(SystemExit):
+            _parse_args(["--daemon", *other])

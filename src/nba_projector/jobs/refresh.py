@@ -1,6 +1,8 @@
 """Daily refresh job: wait for the day's last game, then snapshot the rankings.
 
-Run with ``uv run python -m nba_projector.jobs.refresh [--date YYYY-MM-DD | --latest] [--no-wait]``.
+Run with ``uv run python -m nba_projector.jobs.refresh`` and one of ``--date YYYY-MM-DD``,
+``--latest`` (load the most recent finished game day), or ``--daemon`` (keep updating daily).
+``--no-wait`` skips waiting for games to finish.
 """
 
 import argparse
@@ -9,6 +11,7 @@ import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
+from datetime import time as dt_time
 
 from nba_projector.adapters.nba_api_provider import NbaApiProvider
 from nba_projector.adapters.provider import DataProvider, ScheduledGame
@@ -215,6 +218,54 @@ def refresh_latest(
     return None
 
 
+def _seconds_until_next_eastern_day(game_date: date, now: datetime) -> float:
+    next_midnight = datetime.combine(game_date + timedelta(days=1), dt_time.min, tzinfo=EASTERN)
+    return (next_midnight - now).total_seconds()
+
+
+def run_daily(
+    provider: DataProvider,
+    repo: Repository,
+    *,
+    now: Callable[[], datetime] = _utc_now,
+    sleep: Callable[[float], None] = time.sleep,
+    retry_seconds: float = 900,
+    stop_after: int | None = None,
+) -> None:
+    """Keep the rankings current: update after each day's last game, every day.
+
+    Each pass refreshes today's date in US Eastern time (waiting for that day's games to finish),
+    then sleeps until the next Eastern day. A failed pass keeps the last good snapshot and is
+    retried after ``retry_seconds``.
+
+    Args:
+        provider: Source of schedule and game logs.
+        repo: Store for logs and snapshots.
+        now: Clock, injectable for tests.
+        sleep: Sleep function, injectable for tests.
+        retry_seconds: Delay before retrying after a failure.
+        stop_after: Stop after this many passes (for tests); ``None`` runs until interrupted.
+    """
+    passes = 0
+    while stop_after is None or passes < stop_after:
+        passes += 1
+        game_date = now().astimezone(EASTERN).date()
+        try:
+            run_refresh(provider, repo, game_date, now=now, sleep=sleep)
+        except Exception:
+            logger.exception(
+                "Refresh failed for %s; retrying in %.0f minutes", game_date, retry_seconds / 60
+            )
+            sleep(retry_seconds)
+            continue
+        delay = _seconds_until_next_eastern_day(game_date, now())
+        if delay > 0:
+            logger.info(
+                "Done for %s; sleeping %.1f hours until the next day", game_date, delay / 3600
+            )
+            sleep(delay)
+
+
 def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Refresh the daily 9-cat ranking snapshot.")
     target = parser.add_mutually_exclusive_group()
@@ -225,6 +276,11 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         "--latest",
         action="store_true",
         help="Snapshot the most recent day with games (never waits for games to finish)",
+    )
+    target.add_argument(
+        "--daemon",
+        action="store_true",
+        help="Keep running: update after each day's last game, every day (Ctrl+C to stop)",
     )
     parser.add_argument("--no-wait", action="store_true", help="Do not wait for games to finish")
     return parser.parse_args(argv)
@@ -242,10 +298,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         provider = NbaApiProvider(settings.raw_dir)
         repo = Repository(settings.db_path)
-        if args.latest:
+        if args.daemon:
+            run_daily(provider, repo)
+        elif args.latest:
             refresh_latest(provider, repo, today)
         else:
             run_refresh(provider, repo, game_date, wait=not args.no_wait)
+    except KeyboardInterrupt:
+        logger.info("Stopped")
     except Exception:
         logger.exception("Refresh failed for %s", game_date)
         return 1
