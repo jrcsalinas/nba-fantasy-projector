@@ -1,4 +1,5 @@
 from collections.abc import Iterator
+from dataclasses import replace
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -7,7 +8,13 @@ from fastapi.testclient import TestClient
 
 from nba_projector.adapters.repository import Repository
 from nba_projector.api.routes import get_repository, get_today
-from nba_projector.domain.models import SORT_KEYS, Category, RankedPlayer, Window
+from nba_projector.domain.models import (
+    SORT_KEYS,
+    Category,
+    PlayerAverages,
+    RankedPlayer,
+    Window,
+)
 from nba_projector.main import app
 
 DAY = date(2026, 10, 22)
@@ -181,3 +188,41 @@ def test_rankings_marks_old_snapshot_stale(client: TestClient, repo: Repository)
 
     app.dependency_overrides[get_today] = lambda: DAY + timedelta(days=2)
     assert client.get("/api/v1/rankings").json()["is_stale"] is True
+
+
+def test_rankings_rows_include_per_game_stats(client: TestClient, repo: Repository) -> None:
+    averages = PlayerAverages(
+        player_id=1,
+        player_name="Player 1",
+        games=20,
+        minutes_pg=34.0,
+        pts=27.0,
+        reb=7.0,
+        ast=6.0,
+        stl=1.0,
+        blk=0.5,
+        fg3m=3.0,
+        fgm=10.0,
+        fga=20.0,
+        ftm=5.0,
+        fta=0.0,
+        tov=2.0,
+    )
+    save(repo, DAY, [replace(make_player(1, 1), averages=averages, games_played=9)])
+
+    stats = client.get("/api/v1/rankings").json()["rows"][0]["stats"]
+
+    assert stats["games_played"] == 9
+    assert stats["minutes"] == 34.0
+    assert stats["pts"] == 27.0
+    assert stats["fga"] == 20.0
+    assert stats["fg_pct"] == 0.5
+    assert stats["ft_pct"] is None  # no free throw attempts
+
+
+def test_rankings_rows_without_stored_averages_have_null_stats(
+    client: TestClient, repo: Repository
+) -> None:
+    save(repo, DAY, [make_player(1, 1)])
+
+    assert client.get("/api/v1/rankings").json()["rows"][0]["stats"] is None

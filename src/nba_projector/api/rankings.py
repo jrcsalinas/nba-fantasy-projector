@@ -3,9 +3,37 @@
 from collections.abc import Sequence
 from datetime import date
 
-from nba_projector.api.schemas import RankingRow
+from nba_projector.api.schemas import RankingRow, RowStats
 from nba_projector.domain.models import RankedPlayer
 from nba_projector.domain.ranking import compute_trends
+
+
+def _percentage(made: float, attempted: float) -> float | None:
+    return made / attempted if attempted > 0 else None
+
+
+def stats_for(player: RankedPlayer) -> RowStats | None:
+    """Per-game stats for a ranked player, or ``None`` if the snapshot did not store them."""
+    avg = player.averages
+    if avg is None:
+        return None
+    return RowStats(
+        games_played=player.games_played,
+        minutes=avg.minutes_pg,
+        pts=avg.pts,
+        reb=avg.reb,
+        ast=avg.ast,
+        stl=avg.stl,
+        blk=avg.blk,
+        fg3m=avg.fg3m,
+        fgm=avg.fgm,
+        fga=avg.fga,
+        ftm=avg.ftm,
+        fta=avg.fta,
+        tov=avg.tov,
+        fg_pct=_percentage(avg.fgm, avg.fga),
+        ft_pct=_percentage(avg.ftm, avg.fta),
+    )
 
 
 def build_rows(
@@ -39,6 +67,7 @@ def build_rows(
             player_name=p.player_name,
             total=p.total,
             z={cat.value: value for cat, value in p.z.items()},
+            stats=stats_for(p),
         )
         for p in ordered
     ]

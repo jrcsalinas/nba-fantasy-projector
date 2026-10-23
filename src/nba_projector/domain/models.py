@@ -76,13 +76,20 @@ class PlayerAverages:
 
 @dataclass(frozen=True)
 class RankedPlayer:
-    """A player's category z-scores, total, and ranks within one window."""
+    """A player's category z-scores, total, and ranks within one window.
+
+    ``averages`` are the per-game stats the ranking used (for the Season window, blended with
+    last season until 20 games). ``games_played`` is the games actually played in the window,
+    which differs from ``averages.games`` when prior-season stats are blended in.
+    """
 
     player_id: int
     player_name: str
     z: dict[Category, float]
     total: float
     ranks: dict[str, int]
+    averages: PlayerAverages | None = None
+    games_played: int | None = None
 
 
 @dataclass(frozen=True)

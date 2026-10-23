@@ -1,20 +1,44 @@
 "use strict";
 
-const state = { window: "season", sort: "overall" };
+const state = { window: "season", sort: "overall", view: "stats" };
 let requestId = 0;
+let lastData = null;
 
 const els = {
   asOf: document.getElementById("as-of"),
   stale: document.getElementById("stale"),
   message: document.getElementById("message"),
   tableWrap: document.getElementById("table-wrap"),
+  tableNote: document.getElementById("table-note"),
   rows: document.getElementById("rows"),
 };
 
+// A category cell: the per-game stat (or z-score) shaded by the player's z-score.
+function categoryCell(category, row) {
+  const td = zCell(row.z[category]);
+  if (state.view === "stats") td.textContent = formatStat(category, row.stats);
+  return td;
+}
+
+function extraCell(text) {
+  return cell("extra", text);
+}
+
 function renderRow(row) {
+  const stats = row.stats;
   const tr = document.createElement("tr");
-  tr.append(cell("rank", String(row.rank)), trendCell(row), cell("player", row.player_name));
-  for (const category of CATEGORIES) tr.append(zCell(row.z[category]));
+  tr.append(
+    cell("rank", String(row.rank)),
+    trendCell(row),
+    cell("player", row.player_name),
+    extraCell(stats && stats.games_played !== null ? String(stats.games_played) : "–"),
+    extraCell(stats ? stats.minutes.toFixed(1) : "–"),
+  );
+  for (const category of CATEGORIES) {
+    tr.append(categoryCell(category, row));
+    if (category === "fg_pct") tr.append(extraCell(stats ? stats.fga.toFixed(1) : "–"));
+    if (category === "ft_pct") tr.append(extraCell(stats ? stats.fta.toFixed(1) : "–"));
+  }
   const total = zCell(row.total);
   total.classList.add("total");
   tr.append(total);
@@ -25,10 +49,12 @@ function showMessage(text) {
   els.message.textContent = text;
   els.message.hidden = false;
   els.tableWrap.hidden = true;
+  els.tableNote.hidden = true;
   els.stale.hidden = true;
 }
 
 function renderRankings(data) {
+  lastData = data;
   els.asOf.textContent = `As of ${data.as_of}`;
   els.stale.hidden = !data.is_stale;
   if (data.is_stale) {
@@ -42,12 +68,16 @@ function renderRankings(data) {
   }
   els.message.hidden = true;
   els.tableWrap.hidden = false;
+  els.tableNote.hidden = false;
   els.rows.replaceChildren(...data.rows.map(renderRow));
 }
 
 function syncControls() {
   for (const button of document.querySelectorAll("[data-window]")) {
     button.setAttribute("aria-pressed", String(button.dataset.window === state.window));
+  }
+  for (const button of document.querySelectorAll("[data-view]")) {
+    button.setAttribute("aria-pressed", String(button.dataset.view === state.view));
   }
   for (const button of document.querySelectorAll("[data-sort]")) {
     const th = button.closest("th");
@@ -81,6 +111,13 @@ async function load() {
 document.addEventListener("click", (event) => {
   const target = event.target.closest("button");
   if (!target) return;
+  if (target.dataset.view) {
+    // Same data, different cell text: no need to fetch again.
+    state.view = target.dataset.view;
+    syncControls();
+    if (lastData) renderRankings(lastData);
+    return;
+  }
   if (target.dataset.window) state.window = target.dataset.window;
   else if (target.dataset.sort) state.sort = target.dataset.sort;
   else return;

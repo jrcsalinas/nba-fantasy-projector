@@ -10,8 +10,36 @@ from nba_projector.domain.models import SORT_KEYS, Window
 SortKey = Literal[*SORT_KEYS]
 
 
+class RowStats(BaseModel):
+    """Per-game stats behind a ranking row.
+
+    Season stats are blended with last season's until a player has 20 games, so ``games_played``
+    (games actually played in the window) can be lower than the sample the stats represent.
+    ``fg_pct`` and ``ft_pct`` are ``None`` when the player has no attempts.
+    """
+
+    games_played: int | None
+    minutes: float
+    pts: float
+    reb: float
+    ast: float
+    stl: float
+    blk: float
+    fg3m: float
+    fgm: float
+    fga: float
+    ftm: float
+    fta: float
+    tov: float
+    fg_pct: float | None
+    ft_pct: float | None
+
+
 class RankingRow(BaseModel):
-    """One player's row for the selected window and sort key."""
+    """One player's row for the selected window and sort key.
+
+    ``stats`` is ``None`` for snapshots saved before per-game stats were stored.
+    """
 
     rank: int
     trend: int | None
@@ -20,6 +48,7 @@ class RankingRow(BaseModel):
     player_name: str
     total: float
     z: dict[str, float]
+    stats: RowStats | None
 
 
 class RankingsResponse(BaseModel):

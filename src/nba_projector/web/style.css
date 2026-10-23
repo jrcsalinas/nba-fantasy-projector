@@ -357,3 +357,25 @@ h2 {
 .waiver-group table {
   min-width: 0;
 }
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+td.extra {
+  color: var(--muted);
+}
+
+.table-note {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+@media (max-width: 600px) {
+  .controls {
+    width: 100%;
+  }
+}

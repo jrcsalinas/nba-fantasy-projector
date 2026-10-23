@@ -6,7 +6,8 @@ Run with ``uv run python -m nba_projector.jobs.refresh [--date YYYY-MM-DD] [--no
 import argparse
 import logging
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 
 from nba_projector.adapters.nba_api_provider import NbaApiProvider
@@ -51,8 +52,13 @@ def refresh_deadline(
     return max(g.start_utc for g in games) + buffer
 
 
-def _season_averages(logs: Sequence[GameLog], as_of: date) -> list[PlayerAverages]:
-    """Season-window averages blended with last season while samples are small."""
+def _season_averages(
+    logs: Sequence[GameLog], as_of: date
+) -> tuple[list[PlayerAverages], dict[int, int]]:
+    """Season-window averages blended with last season while samples are small.
+
+    Returns the blended averages and the games each player has actually played this season.
+    """
     current = average_logs(logs, Window.SEASON, as_of)
     prior_all = average_logs(logs, Window.SEASON, date(_season_start_year(as_of), 7, 31))
     prior = {pid: a for pid, a in prior_all.items() if a.games >= MIN_GAMES[Window.SEASON]}
@@ -60,7 +66,24 @@ def _season_averages(logs: Sequence[GameLog], as_of: date) -> list[PlayerAverage
     player_ids = set(current) if underway else set(current) | set(prior)
 
     blended = (blend_with_prior(current.get(pid), prior.get(pid)) for pid in player_ids)
-    return [a for a in blended if a is not None]
+    return [a for a in blended if a is not None], {pid: a.games for pid, a in current.items()}
+
+
+def _with_games_played(
+    ranked: Sequence[RankedPlayer], games_played: Mapping[int, int] | None = None
+) -> list[RankedPlayer]:
+    """Attach games played: from ``games_played`` when given, else the averages' own count."""
+    return [
+        replace(
+            r,
+            games_played=(
+                games_played.get(r.player_id, 0)
+                if games_played is not None
+                else (r.averages.games if r.averages else None)
+            ),
+        )
+        for r in ranked
+    ]
 
 
 def build_snapshots(logs: Sequence[GameLog], as_of: date) -> dict[Window, list[RankedPlayer]]:
@@ -76,14 +99,15 @@ def build_snapshots(logs: Sequence[GameLog], as_of: date) -> dict[Window, list[R
     Returns:
         Ranked players per window.
     """
+    season_averages, season_games = _season_averages(logs, as_of)
+    ranked_season = rank_players(season_averages, MIN_GAMES[Window.SEASON], MIN_MINUTES_PG)
     snapshots: dict[Window, list[RankedPlayer]] = {
-        Window.SEASON: rank_players(
-            _season_averages(logs, as_of), MIN_GAMES[Window.SEASON], MIN_MINUTES_PG
-        )
+        Window.SEASON: _with_games_played(ranked_season, season_games)
     }
     for window in (Window.LAST_15, Window.LAST_30):
         averages = list(average_logs(logs, window, as_of).values())
-        snapshots[window] = rank_players(averages, MIN_GAMES[window], MIN_MINUTES_PG)
+        ranked = rank_players(averages, MIN_GAMES[window], MIN_MINUTES_PG)
+        snapshots[window] = _with_games_played(ranked)
     return snapshots
 
 

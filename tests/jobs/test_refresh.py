@@ -211,3 +211,31 @@ def test_run_refresh_fetch_failure_leaves_previous_snapshot_intact(repo: Reposit
         run_refresh(broken, repo, GAME_DAY, wait=False)
 
     assert repo.load_snapshot(GAME_DAY, Window.SEASON) == before
+
+
+def test_build_snapshots_reports_games_actually_played_not_blended_weight() -> None:
+    logs = pool(PRIOR, date(2026, 1, 1), 30) + pool(CURRENT, date(2026, 10, 20), 6, players=(1, 2))
+
+    snapshots = build_snapshots(logs, date(2026, 10, 30))
+
+    season = {p.player_id: p for p in snapshots[Window.SEASON]}
+    assert season[1].games_played == 6
+    assert season[1].averages is not None
+    assert season[1].averages.games == 20  # blended weight, not games played
+
+
+def test_build_snapshots_season_opener_games_played_is_zero_for_prior_only() -> None:
+    logs = pool(PRIOR, date(2026, 1, 1), 30)
+
+    season = build_snapshots(logs, date(2026, 10, 22))[Window.SEASON]
+
+    assert {p.games_played for p in season} == {0}
+
+
+def test_build_snapshots_window_games_played_counts_games_in_window() -> None:
+    logs = pool(CURRENT, date(2026, 11, 14), 12)
+
+    snapshots = build_snapshots(logs, date(2026, 11, 30))
+
+    assert {p.games_played for p in snapshots[Window.LAST_15]} == {10}
+    assert {p.games_played for p in snapshots[Window.LAST_30]} == {12}

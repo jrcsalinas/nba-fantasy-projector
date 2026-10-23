@@ -24,6 +24,11 @@ Then open <http://127.0.0.1:8000/>. The API docs are at <http://127.0.0.1:8000/d
 For the My roster tab, copy `roster.example.json` to `data/roster.json` and list your players
 (see [My roster](#my-roster)).
 
+The dashboard shows per-game stats (GP, MPG, the nine categories, FGA, FTA) shaded by z-score;
+the **Z-score** toggle shows the z-scores instead. Season stats include last season's averages
+until a player has 20 games. Snapshots saved before per-game stats were stored show "–" for stats
+until you re-run the job for that date (`--date YYYY-MM-DD --no-wait`).
+
 If the date has no games the job writes nothing; pass `--date YYYY-MM-DD` with a past game date.
 Last 15 and Last 30 stay empty early in the season until players reach the minimum games.
 
@@ -46,6 +51,8 @@ curl "http://127.0.0.1:8000/api/v1/rankings?window=l15&sort=pts&limit=10"
 - `window`: `season` (default), `l15`, `l30`
 - `sort`: `overall` (default), `pts`, `reb`, `ast`, `stl`, `blk`, `fg3m`, `fg_pct`, `ft_pct`, `tov`
 - `limit`: 1 to 500, default 100
+
+Each row has `z` (category z-scores) and `stats` (per-game averages, or `null` for old snapshots).
 
 The endpoint reads saved snapshots only and never calls `nba_api`. It returns 404 until the first
 refresh has run.

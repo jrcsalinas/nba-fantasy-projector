@@ -111,6 +111,7 @@ def rank_players(
                 "overall": overall[p.player_id],
                 **{cat.value: cat_ranks[cat][p.player_id] for cat in Category},
             },
+            averages=p,
         )
         for p in pool
     ]

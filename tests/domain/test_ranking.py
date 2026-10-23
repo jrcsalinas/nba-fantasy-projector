@@ -121,3 +121,12 @@ def test_rank_players_category_rank_breaks_ties_by_overall_rank() -> None:
 
     assert result[2].ranks["overall"] < result[1].ranks["overall"]
     assert result[2].ranks["pts"] < result[1].ranks["pts"]
+
+
+def test_rank_players_attaches_the_averages_used_for_ranking() -> None:
+    pool = [make_avg(1, pts=10), make_avg(2, pts=20), make_avg(3, pts=30)]
+
+    result = rank(pool)
+
+    assert result[2].averages == pool[1]
+    assert result[2].games_played is None

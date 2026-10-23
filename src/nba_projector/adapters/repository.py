@@ -8,13 +8,29 @@ from dataclasses import fields
 from datetime import date
 from pathlib import Path
 
-from nba_projector.domain.models import SORT_KEYS, Category, GameLog, RankedPlayer, Window
+from nba_projector.domain.models import (
+    SORT_KEYS,
+    Category,
+    GameLog,
+    PlayerAverages,
+    RankedPlayer,
+    Window,
+)
 
 logger = logging.getLogger(__name__)
 
 _LOG_COLUMNS = [f.name for f in fields(GameLog)]
 _Z_COLUMNS = [f"z_{cat.value}" for cat in Category]
 _RANK_COLUMNS = [f"rank_{key}" for key in SORT_KEYS]
+_AVG_RATE_FIELDS = ("pts", "reb", "ast", "stl", "blk", "fg3m", "fgm", "fga", "ftm", "fta", "tov")
+# Nullable so snapshots saved before per-game stats were stored still load.
+_STAT_COLUMN_TYPES = {
+    "games_played": "INTEGER",
+    "avg_games": "INTEGER",
+    "avg_minutes_pg": "REAL",
+    **{f"avg_{field}": "REAL" for field in _AVG_RATE_FIELDS},
+}
+_STAT_COLUMNS = list(_STAT_COLUMN_TYPES)
 _SNAPSHOT_COLUMNS = [
     "snapshot_date",
     "window",
@@ -23,6 +39,7 @@ _SNAPSHOT_COLUMNS = [
     "total",
     *_Z_COLUMNS,
     *_RANK_COLUMNS,
+    *_STAT_COLUMNS,
 ]
 
 _SCHEMA = f"""
@@ -48,6 +65,7 @@ CREATE TABLE IF NOT EXISTS snapshots (
     total REAL NOT NULL,
     {", ".join(f"{c} REAL NOT NULL" for c in _Z_COLUMNS)},
     {", ".join(f"{c} INTEGER NOT NULL" for c in _RANK_COLUMNS)},
+    {", ".join(f"{c} {t}" for c, t in _STAT_COLUMN_TYPES.items())},
     PRIMARY KEY (snapshot_date, window, player_id)
 );
 """
@@ -70,6 +88,18 @@ def _to_game_log(row: Sequence[object]) -> GameLog:
     return GameLog(**values)  # type: ignore[arg-type]
 
 
+def _stat_values(player: RankedPlayer) -> tuple[object, ...]:
+    averages = player.averages
+    if averages is None:
+        return (player.games_played, *([None] * (len(_STAT_COLUMNS) - 1)))
+    return (
+        player.games_played,
+        averages.games,
+        averages.minutes_pg,
+        *(getattr(averages, field) for field in _AVG_RATE_FIELDS),
+    )
+
+
 def _snapshot_row(snapshot_date: date, window: Window, player: RankedPlayer) -> tuple[object, ...]:
     return (
         snapshot_date.isoformat(),
@@ -79,6 +109,29 @@ def _snapshot_row(snapshot_date: date, window: Window, player: RankedPlayer) -> 
         player.total,
         *(player.z[cat] for cat in Category),
         *(player.ranks[key] for key in SORT_KEYS),
+        *_stat_values(player),
+    )
+
+
+def _to_ranked_player(row: Sequence[object]) -> RankedPlayer:
+    values = dict(zip(_SNAPSHOT_COLUMNS, row, strict=True))
+    averages = None
+    if values["avg_pts"] is not None:
+        averages = PlayerAverages(
+            player_id=values["player_id"],  # type: ignore[arg-type]
+            player_name=values["player_name"],  # type: ignore[arg-type]
+            games=values["avg_games"],  # type: ignore[arg-type]
+            minutes_pg=values["avg_minutes_pg"],  # type: ignore[arg-type]
+            **{field: values[f"avg_{field}"] for field in _AVG_RATE_FIELDS},  # type: ignore[arg-type]
+        )
+    return RankedPlayer(
+        player_id=values["player_id"],  # type: ignore[arg-type]
+        player_name=values["player_name"],  # type: ignore[arg-type]
+        total=values["total"],  # type: ignore[arg-type]
+        z={cat: values[f"z_{cat.value}"] for cat in Category},  # type: ignore[misc]
+        ranks={key: values[f"rank_{key}"] for key in SORT_KEYS},  # type: ignore[misc]
+        averages=averages,
+        games_played=values["games_played"],  # type: ignore[arg-type]
     )
 
 
@@ -96,6 +149,16 @@ class Repository:
         with self._connect() as conn:
             conn.execute("PRAGMA journal_mode=WAL")
             conn.executescript(_SCHEMA)
+            self._add_missing_stat_columns(conn)
+
+    @staticmethod
+    def _add_missing_stat_columns(conn: sqlite3.Connection) -> None:
+        """Upgrade a snapshots table created before per-game stats were stored."""
+        existing = {row[1] for row in conn.execute("PRAGMA table_info(snapshots)")}
+        for column, column_type in _STAT_COLUMN_TYPES.items():
+            if column not in existing:
+                conn.execute(f"ALTER TABLE snapshots ADD COLUMN {column} {column_type}")
+                logger.info("Added snapshots.%s", column)
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
@@ -173,15 +236,4 @@ class Repository:
         )
         with self._connect() as conn:
             rows = conn.execute(sql, (snapshot_date.isoformat(), window.value)).fetchall()
-        z_start = _SNAPSHOT_COLUMNS.index(_Z_COLUMNS[0])
-        rank_start = _SNAPSHOT_COLUMNS.index(_RANK_COLUMNS[0])
-        return [
-            RankedPlayer(
-                player_id=row[2],
-                player_name=row[3],
-                total=row[4],
-                z={cat: row[z_start + i] for i, cat in enumerate(Category)},
-                ranks={key: row[rank_start + i] for i, key in enumerate(SORT_KEYS)},
-            )
-            for row in rows
-        ]
+        return [_to_ranked_player(row) for row in rows]

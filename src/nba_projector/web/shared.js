@@ -59,3 +59,12 @@ async function errorDetail(response) {
   }
   return `The server returned an error (HTTP ${response.status}).`;
 }
+
+// A category's per-game value as text. Percentages are shown as 48.5, not 0.485.
+function formatStat(category, stats) {
+  if (!stats) return "–";
+  if (category === "fg_pct" || category === "ft_pct") {
+    return stats[category] === null ? "–" : (stats[category] * 100).toFixed(1);
+  }
+  return stats[category].toFixed(1);
+}
