@@ -131,6 +131,18 @@ def test_rankings_empty_snapshot_returns_200_with_empty_rows(tmp_path: Path) -> 
     assert response.json()["rows"] == []
 
 
+def test_rankings_window_without_players_returns_200_when_other_window_has_data(
+    client: TestClient, repo: Repository
+) -> None:
+    repo.replace_snapshots(DAY, {Window.SEASON: [make_player(1, 1)], Window.LAST_15: []})
+
+    response = client.get("/api/v1/rankings", params={"window": "l15"})
+
+    assert response.status_code == 200
+    assert response.json()["rows"] == []
+    assert response.json()["as_of"] == "2026-10-22"
+
+
 def test_rankings_no_snapshot_returns_404(client: TestClient) -> None:
     response = client.get("/api/v1/rankings")
 

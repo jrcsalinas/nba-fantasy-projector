@@ -53,12 +53,22 @@ def get_rankings(
     snapshot of the same window.
     """
     dates = repo.snapshot_dates(window, limit=2)
-    if not dates:
-        raise HTTPException(status_code=404, detail="No rankings available yet")
-
-    as_of = dates[0]
-    previous = repo.load_snapshot(dates[1], window) if len(dates) > 1 else None
-    rows = build_rows(repo.load_snapshot(as_of, window), previous, sort, limit)
+    if dates:
+        as_of = dates[0]
+        previous = repo.load_snapshot(dates[1], window) if len(dates) > 1 else None
+        rows = build_rows(repo.load_snapshot(as_of, window), previous, sort, limit)
+    else:
+        # A window nobody qualifies for stores no rows, so fall back to the newest snapshot of
+        # any window: data exists, this window is just empty.
+        latest = _latest_snapshot_date(repo)
+        if latest is None:
+            raise HTTPException(status_code=404, detail="No rankings available yet")
+        as_of, rows = latest, []
     return RankingsResponse(
         window=window, sort=sort, as_of=as_of, is_stale=is_stale(as_of, today), rows=rows
     )
+
+
+def _latest_snapshot_date(repo: Repository) -> date | None:
+    dates = [d for w in Window for d in repo.snapshot_dates(w, limit=1)]
+    return max(dates, default=None)
