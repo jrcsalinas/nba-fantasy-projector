@@ -13,13 +13,22 @@ estimates, not guarantees.
 
 ## Quick start
 
+On Windows, double-click **`run.bat`** (or run it from a terminal). It installs dependencies, loads
+the most recent finished game day, starts the **daily updater** in a second window, opens
+<http://127.0.0.1:8000/>, and runs the server. The rankings then refresh by themselves after each
+day's last game. Close both windows to stop. The API docs are at <http://127.0.0.1:8000/docs>.
+
+To run the pieces yourself:
+
 ```powershell
 uv sync
-uv run python -m nba_projector.jobs.refresh --no-wait   # load data once
-uv run uvicorn nba_projector.main:app --reload
+uv run python -m nba_projector.jobs.refresh --latest   # load the most recent finished game day
+uv run python -m nba_projector.jobs.refresh --daemon   # keep updating daily (own terminal)
+uv run uvicorn nba_projector.main:app                  # the web app (own terminal)
 ```
 
-Then open <http://127.0.0.1:8000/>. The API docs are at <http://127.0.0.1:8000/docs>.
+Pages only work while the server terminal stays open. If a page says "site can't be reached", the
+server is not running.
 
 For the My roster tab, copy `roster.example.json` to `data/roster.json` and list your players
 (see [My roster](#my-roster)).
@@ -29,7 +38,6 @@ the **Z-score** toggle shows the z-scores instead. Season stats include last sea
 until a player has 20 games. Snapshots saved before per-game stats were stored show "–" for stats
 until you re-run the job for that date (`--date YYYY-MM-DD --no-wait`).
 
-If the date has no games the job writes nothing; pass `--date YYYY-MM-DD` with a past game date.
 Last 15 and Last 30 stay empty early in the season until players reach the minimum games.
 
 ## Configuration
@@ -87,11 +95,20 @@ curl "http://127.0.0.1:8000/api/v1/roster/waivers?cutoff=150&limit=5"
 
 ## Daily refresh
 
-`jobs.refresh` is its own entry point, run by an external scheduler. Schedule it once a day
-around late morning US Eastern time. It finds the day's last game, waits until about three hours
-after it starts, polls until every game is final (giving up six hours after the start), then
-saves one snapshot per window for that game date. Re-running a date replaces its snapshot, and a
-failed fetch leaves the previous snapshot untouched.
+`jobs.refresh` is its own entry point. Each run downloads every game of the season so far (plus
+last season's, once), then ranks players over the season, last 15 days, and last 30 days. It saves
+one snapshot per window labeled with that game date, which is what the Trend column compares.
+Re-running a date replaces its snapshot, and a failed fetch leaves the previous snapshot untouched.
+
+| Mode | What it does |
+| --- | --- |
+| `--daemon` | Keeps running. Each day it waits until about three hours after the last game starts (polling until every game is final, giving up after six hours), saves the snapshot, then sleeps until the next day. Retries after 15 minutes if a fetch fails. `run.bat` starts this for you. |
+| `--latest` | Loads the most recent day with a finished game, then exits. For first-time loading. |
+| `--date YYYY-MM-DD` | Snapshots one specific past or present game date. Add `--no-wait` to skip waiting for games. |
+| _(none)_ | Snapshots today (US Eastern), waiting for the last game, then exits. For a scheduler. |
+
+To run the single-day mode from an external scheduler instead of `--daemon`, run it once a day
+around late morning US Eastern time; it waits for the last game itself.
 
 On Windows, use Task Scheduler with the action:
 
