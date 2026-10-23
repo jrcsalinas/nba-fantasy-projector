@@ -1,0 +1,56 @@
+{
+ "leagueSchedule": {
+  "gameDates": [
+   {
+    "gameDate": "10/03/2026 00:00:00",
+    "games": [
+     {
+      "gameDateTimeUTC": "2026-10-03T23:00:00Z",
+      "gameId": "0012600009",
+      "gameStatus": 3,
+      "gameDateEst": "2026-10-03T00:00:00Z",
+      "gameStatusText": "Final"
+     }
+    ]
+   },
+   {
+    "gameDate": "10/22/2026 00:00:00",
+    "games": [
+     {
+      "gameDateTimeUTC": "2026-10-22T23:00:00Z",
+      "gameId": "0022600006",
+      "gameStatus": 3,
+      "gameDateEst": "2026-10-22T00:00:00Z",
+      "gameStatusText": "Final"
+     },
+     {
+      "gameDateTimeUTC": "2026-10-23T01:30:00Z",
+      "gameId": "0022600007",
+      "gameStatus": 3,
+      "gameDateEst": "2026-10-22T00:00:00Z",
+      "gameStatusText": "Final"
+     }
+    ]
+   },
+   {
+    "gameDate": "10/23/2026 00:00:00",
+    "games": [
+     {
+      "gameDateTimeUTC": "2026-10-23T23:00:00Z",
+      "gameId": "0022600008",
+      "gameStatus": 1,
+      "gameDateEst": "2026-10-23T00:00:00Z",
+      "gameStatusText": "7:00 pm ET"
+     },
+     {
+      "gameDateTimeUTC": "2026-10-24T01:30:00Z",
+      "gameId": "0022600009",
+      "gameStatus": 1,
+      "gameDateEst": "2026-10-23T00:00:00Z",
+      "gameStatusText": "9:30 pm ET"
+     }
+    ]
+   }
+  ]
+ }
+}
