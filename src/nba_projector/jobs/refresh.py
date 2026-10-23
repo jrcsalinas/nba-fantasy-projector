@@ -1,6 +1,6 @@
 """Daily refresh job: wait for the day's last game, then snapshot the rankings.
 
-Run with ``uv run python -m nba_projector.jobs.refresh [--date YYYY-MM-DD] [--no-wait]``.
+Run with ``uv run python -m nba_projector.jobs.refresh [--date YYYY-MM-DD | --latest] [--no-wait]``.
 """
 
 import argparse
@@ -187,10 +187,44 @@ def run_refresh(
     return True
 
 
+def refresh_latest(
+    provider: DataProvider, repo: Repository, today: date, *, days: int = 7
+) -> date | None:
+    """Snapshot the most recent day with a finished game, looking back from ``today``.
+
+    Days whose games have not started or finished yet are skipped. Does not wait for games, so
+    it is for loading data on demand rather than for the daily scheduled run. Re-running a date
+    replaces its snapshot.
+
+    Args:
+        provider: Source of schedule and game logs.
+        repo: Store for logs and snapshots.
+        today: First date to try (US Eastern).
+        days: How many days to look back, including ``today``.
+
+    Returns:
+        The date that was snapshotted, or ``None`` if none of the days had games.
+    """
+    for offset in range(days):
+        game_date = today - timedelta(days=offset)
+        if not any(g.is_final for g in provider.fetch_schedule(game_date)):
+            continue
+        if run_refresh(provider, repo, game_date, wait=False):
+            return game_date
+    logger.warning("No finished games in the last %d days; nothing was saved", days)
+    return None
+
+
 def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Refresh the daily 9-cat ranking snapshot.")
-    parser.add_argument(
+    target = parser.add_mutually_exclusive_group()
+    target.add_argument(
         "--date", type=date.fromisoformat, help="Game date, YYYY-MM-DD (US Eastern)"
+    )
+    target.add_argument(
+        "--latest",
+        action="store_true",
+        help="Snapshot the most recent day with games (never waits for games to finish)",
     )
     parser.add_argument("--no-wait", action="store_true", help="Do not wait for games to finish")
     return parser.parse_args(argv)
@@ -202,15 +236,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
     )
     args = _parse_args(argv)
-    game_date = args.date or datetime.now(EASTERN).date()
+    today = datetime.now(EASTERN).date()
+    game_date = args.date or today
     settings = get_settings()
     try:
-        run_refresh(
-            NbaApiProvider(settings.raw_dir),
-            Repository(settings.db_path),
-            game_date,
-            wait=not args.no_wait,
-        )
+        provider = NbaApiProvider(settings.raw_dir)
+        repo = Repository(settings.db_path)
+        if args.latest:
+            refresh_latest(provider, repo, today)
+        else:
+            run_refresh(provider, repo, game_date, wait=not args.no_wait)
     except Exception:
         logger.exception("Refresh failed for %s", game_date)
         return 1

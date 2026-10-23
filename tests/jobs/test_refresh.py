@@ -8,7 +8,13 @@ import pytest
 from nba_projector.adapters.provider import ScheduledGame
 from nba_projector.adapters.repository import Repository
 from nba_projector.domain.models import GameLog, Window
-from nba_projector.jobs.refresh import build_snapshots, refresh_deadline, run_refresh
+from nba_projector.jobs.refresh import (
+    _parse_args,
+    build_snapshots,
+    refresh_deadline,
+    refresh_latest,
+    run_refresh,
+)
 
 GAME_DAY = date(2026, 10, 23)
 GAME_START = datetime(2026, 10, 23, 23, 0, tzinfo=UTC)
@@ -239,3 +245,81 @@ def test_build_snapshots_window_games_played_counts_games_in_window() -> None:
 
     assert {p.games_played for p in snapshots[Window.LAST_15]} == {10}
     assert {p.games_played for p in snapshots[Window.LAST_30]} == {12}
+
+
+class DatedProvider(FakeProvider):
+    """A provider whose schedule depends on the requested date."""
+
+    def __init__(
+        self,
+        logs: dict[str, list[GameLog]],
+        game_dates: set[date],
+        unplayed_dates: set[date] = frozenset(),  # type: ignore[assignment]
+    ) -> None:
+        super().__init__(logs, final_games)
+        self.game_dates = game_dates
+        self.unplayed_dates = unplayed_dates
+        self.requested: list[date] = []
+
+    def fetch_schedule(self, game_date: date) -> list[ScheduledGame]:
+        self.requested.append(game_date)
+        if game_date in self.unplayed_dates:
+            return [ScheduledGame("0022600099", GAME_START, False)]
+        return final_games(0) if game_date in self.game_dates else []
+
+
+def test_refresh_latest_snapshots_today_when_there_are_games(repo: Repository) -> None:
+    provider = DatedProvider({CURRENT: pool(CURRENT, date(2026, 10, 1), 12)}, {GAME_DAY})
+
+    result = refresh_latest(provider, repo, GAME_DAY)
+
+    assert result == GAME_DAY
+    assert repo.snapshot_dates(Window.SEASON, limit=5) == [GAME_DAY]
+
+
+def test_refresh_latest_falls_back_to_most_recent_game_day(repo: Repository) -> None:
+    two_days_ago = GAME_DAY - timedelta(days=2)
+    provider = DatedProvider(
+        {CURRENT: pool(CURRENT, date(2026, 10, 1), 12)},
+        {two_days_ago, GAME_DAY - timedelta(days=5)},
+    )
+
+    result = refresh_latest(provider, repo, GAME_DAY)
+
+    assert result == two_days_ago
+    assert repo.snapshot_dates(Window.SEASON, limit=5) == [two_days_ago]
+
+
+def test_refresh_latest_skips_days_whose_games_have_not_finished(repo: Repository) -> None:
+    yesterday = GAME_DAY - timedelta(days=1)
+    provider = DatedProvider(
+        {CURRENT: pool(CURRENT, date(2026, 10, 1), 12)},
+        {yesterday},
+        unplayed_dates={GAME_DAY},
+    )
+
+    result = refresh_latest(provider, repo, GAME_DAY)
+
+    assert result == yesterday
+    assert repo.snapshot_dates(Window.SEASON, limit=5) == [yesterday]
+
+
+def test_refresh_latest_returns_none_and_writes_nothing_without_games(repo: Repository) -> None:
+    provider = DatedProvider({}, set())
+
+    result = refresh_latest(provider, repo, GAME_DAY, days=3)
+
+    assert result is None
+    assert len(provider.requested) == 3
+    assert repo.snapshot_dates(Window.SEASON) == []
+
+
+def test_cli_accepts_latest_date_and_no_wait() -> None:
+    assert _parse_args(["--latest"]).latest is True
+    assert _parse_args(["--date", "2026-10-22", "--no-wait"]).date == date(2026, 10, 22)
+    assert _parse_args([]).latest is False
+
+
+def test_cli_rejects_latest_together_with_date() -> None:
+    with pytest.raises(SystemExit):
+        _parse_args(["--latest", "--date", "2026-10-22"])
