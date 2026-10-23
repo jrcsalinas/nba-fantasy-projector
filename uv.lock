@@ -393,6 +393,7 @@ dependencies = [
     { name = "fastapi" },
     { name = "nba-api" },
     { name = "pydantic-settings" },
+    { name = "requests" },
     { name = "tzdata" },
     { name = "uvicorn", extra = ["standard"] },
 ]
@@ -409,6 +410,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.143.2" },
     { name = "nba-api", specifier = ">=1.11.6" },
     { name = "pydantic-settings", specifier = ">=2.16.1" },
+    { name = "requests", specifier = ">=2.34.2" },
     { name = "tzdata", specifier = ">=2026.5" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.54.0" },
 ]

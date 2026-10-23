@@ -8,6 +8,7 @@ dependencies = [
     "fastapi>=0.143.2",
     "nba-api>=1.11.6",
     "pydantic-settings>=2.16.1",
+    "requests>=2.34.2",
     "tzdata>=2026.5",
     "uvicorn[standard]>=0.54.0",
 ]
