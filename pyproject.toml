@@ -15,5 +15,13 @@ source = ["src/nbaproj"]
 [tool.pylint.main]
 source-roots = ["src"]
 
+[tool.pylint.design]
+# Approved by Josh (2026-10-27): SQLAlchemy's TypeDecorator already has 7 ancestors.
+max-parents = 10
+
+[tool.pylint."messages control"]
+# Approved by Josh (2026-10-27): ORM models are plain data classes, so this check misfires.
+disable = ["too-few-public-methods"]
+
 [tool.bandit]
 exclude_dirs = ["tests", ".venv"]
