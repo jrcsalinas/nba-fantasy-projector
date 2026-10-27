@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+
+# Tooling caches
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Secrets / local config
+.env
+.env.*
+
+# Local data
+*.sqlite
+*.sqlite3
+*.db
+data/cache/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Claude Code and Trinity SDLC (local only)
+.claude/
+CLAUDE.md
+.trinity/
+artifacts/
+bootstrap/
+templates/
+trinity-config.md
+trinity-tools.yml
+trinity-manifest.json
