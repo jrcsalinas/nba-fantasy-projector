@@ -1,0 +1,19 @@
+[project]
+name = "nba-fantasy-projector"
+version = "0.1.0"
+description = "Trend-based lineup advisor for NBA head-to-head 9-category fantasy leagues"
+requires-python = ">=3.13"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "--cov=nbaproj --cov-branch --cov-report=term-missing --cov-fail-under=80"
+
+[tool.coverage.run]
+source = ["src/nbaproj"]
+
+[tool.pylint.main]
+source-roots = ["src"]
+
+[tool.bandit]
+exclude_dirs = ["tests", ".venv"]
