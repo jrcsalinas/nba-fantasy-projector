@@ -1,5 +1,6 @@
 """Tests for the command line: backfill and schedule."""
 
+import getpass as getpass_module
 import logging
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -16,6 +17,7 @@ from nbaproj.db.models import Base, Game, GameLog
 from nbaproj.db.session import create_db_engine
 from nbaproj.ingestion.client import NbaClientError
 from nbaproj.ingestion.runs import LOCK_NAME, RunResult
+from nbaproj.web.security import verify_password
 from tests.ingestion.fakes import FakeStatsClient
 
 TODAY = date(2026, 10, 28)
@@ -208,3 +210,41 @@ def test_cli_logs_the_database_it_uses(env, caplog):
     main(["schedule"], _clients(), env)
 
     assert f"database: {env['DATABASE_URL']}" in [r.getMessage() for r in caplog.records]
+
+
+def _type_passwords(monkeypatch, *answers: str) -> None:
+    """Answer the password prompts (password, then its confirmation) without a terminal."""
+    replies = iter(answers)
+    monkeypatch.setattr(getpass_module, "getpass", lambda prompt="": next(replies))
+
+
+def test_cli_hash_password_prints_a_verifiable_hash(monkeypatch, tmp_path, capsys):
+    """The command prints only the hash, never the password, and needs no database."""
+    monkeypatch.chdir(tmp_path)
+    _type_passwords(monkeypatch, "my secret password", "my secret password")
+
+    code = main(["hash-password"], env={})
+
+    captured = capsys.readouterr()
+    assert code == 0
+    assert verify_password(captured.out.strip(), "my secret password") is True
+    assert "my secret password" not in captured.out + captured.err
+    assert not list(tmp_path.glob("*.db"))
+
+
+@pytest.mark.parametrize(
+    ("answers", "reason"),
+    [(("one", "two"), "do not match"), (("", ""), "empty")],
+)
+def test_cli_hash_password_refuses_a_mismatch_or_an_empty_password(
+    monkeypatch, capsys, answers, reason
+):
+    """A typo or an empty password gives exit code 2, an explanation, and no hash."""
+    _type_passwords(monkeypatch, *answers)
+
+    code = main(["hash-password"], env={})
+
+    captured = capsys.readouterr()
+    assert code == 2
+    assert reason in captured.err
+    assert "$argon2" not in captured.out

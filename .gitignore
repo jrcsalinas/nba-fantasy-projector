@@ -30,13 +30,14 @@ data/cache/
 .DS_Store
 Thumbs.db
 
-# Claude Code and Trinity SDLC (local only)
-.claude/
-CLAUDE.md
-.trinity/
-artifacts/
-bootstrap/
-templates/
-trinity-config.md
-trinity-tools.yml
-trinity-manifest.json
+# Claude Code and Trinity SDLC (local only). Anchored to the repo root with a leading
+# slash: an unanchored `templates/` also matched src/nbaproj/web/templates/.
+/.claude/
+/CLAUDE.md
+/.trinity/
+/artifacts/
+/bootstrap/
+/templates/
+/trinity-config.md
+/trinity-tools.yml
+/trinity-manifest.json

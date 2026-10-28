@@ -9,6 +9,7 @@ first with ``alembic upgrade head``.
 """
 
 import argparse
+import getpass
 import logging
 import os
 import re
@@ -33,6 +34,7 @@ from nbaproj.ingestion.schedule import (
     run_schedule_refresh,
     season_for_date,
 )
+from nbaproj.web.security import hash_password
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +87,9 @@ def _build_parser() -> argparse.ArgumentParser:
         "schedule", help="cache a season's schedule (default: the current season)"
     )
     schedule.add_argument("--season", type=_season, help="for example 2026-27")
+    commands.add_parser(
+        "hash-password", help="make the argon2 hash for PASSWORD_HASH (asks for the password)"
+    )
     return parser
 
 
@@ -130,6 +135,20 @@ def _run_command(
     ]
 
 
+def _hash_password_command() -> int:
+    """Ask for the password twice and print its argon2 hash. Needs no database."""
+    password = getpass.getpass("Password: ")
+    if not password:
+        print("The password is empty.", file=sys.stderr)
+        return 2
+    if getpass.getpass("Repeat the password: ") != password:
+        print("The two passwords do not match.", file=sys.stderr)
+        return 2
+    print(hash_password(password))
+    print("Set this value as the PASSWORD_HASH environment variable.", file=sys.stderr)
+    return 0
+
+
 def main(
     argv: Sequence[str] | None = None,
     clients: Clients = Clients(),
@@ -137,6 +156,8 @@ def main(
 ) -> int:
     """Run a command and return the process exit code (1 if any run failed or was rejected)."""
     args = _build_parser().parse_args(argv)
+    if args.command == "hash-password":
+        return _hash_password_command()
     try:
         settings = load_settings(os.environ if env is None else env)
     except ConfigError as error:
