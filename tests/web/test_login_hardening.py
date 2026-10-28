@@ -2,6 +2,11 @@
 
 import asyncio
 import logging
+import time
+from collections import Counter
+
+import httpx2
+from fastapi.testclient import TestClient
 
 from tests.web.conftest import TEST_PASSWORD
 from tests.web.helpers import csrf_token, log_in
@@ -32,7 +37,7 @@ def test_a_failed_login_is_logged_without_the_password(client, caplog):
     with caplog.at_level(logging.WARNING):
         log_in(client, WRONG_PASSWORD)
 
-    assert "Failed login from testclient" in caplog.text
+    assert "Failed login from 'testclient'" in caplog.text
     assert WRONG_PASSWORD not in caplog.text and TEST_PASSWORD not in caplog.text
 
 
@@ -45,5 +50,43 @@ def test_a_login_refused_during_a_lockout_is_logged(client, caplog):
         refused = client.post("/login", data={"password": TEST_PASSWORD, "csrf_token": token})
 
     assert refused.status_code == 429
-    assert "Login refused for locked-out address testclient" in caplog.text
+    assert "Login refused for locked-out address 'testclient'" in caplog.text
     assert TEST_PASSWORD not in caplog.text and WRONG_PASSWORD not in caplog.text
+
+
+def test_many_wrong_guesses_at_once_are_still_limited_to_five(app, monkeypatch):
+    """The lockout counts a guess before the slow check finishes, not after.
+
+    Thirty guesses arrive together over one session; if each were counted only once its
+    check had finished, all thirty would be checked before the first count landed.
+    """
+
+    def slow_wrong_password(_password_hash, _password):
+        time.sleep(0.05)
+        return False
+
+    monkeypatch.setattr("nbaproj.web.auth.verify_password", slow_wrong_password)
+
+    async def attack() -> Counter:
+        transport = httpx2.ASGITransport(app=app)
+        async with httpx2.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            token = csrf_token((await client.get("/login")).text)
+            form = {"password": WRONG_PASSWORD, "csrf_token": token}
+            replies = await asyncio.gather(*[client.post("/login", data=form) for _ in range(30)])
+        return Counter(reply.status_code for reply in replies)
+
+    codes = asyncio.run(attack())
+
+    assert codes[401] <= 5
+    assert codes[401] + codes[429] == 30
+
+
+def test_a_client_address_with_spaces_is_logged_quoted(app, caplog):
+    """Behind a mis-set proxy the address is whatever the client claims, not trusted text."""
+    forged = "1.2.3.4 Login succeeded for owner"
+
+    with caplog.at_level(logging.WARNING), TestClient(app, client=(forged, 50000)) as client:
+        log_in(client, WRONG_PASSWORD)
+
+    assert f"Failed login from {forged!r}" in caplog.text
+    assert f"from {forged} " not in caplog.text

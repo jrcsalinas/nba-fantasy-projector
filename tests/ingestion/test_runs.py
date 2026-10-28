@@ -108,6 +108,17 @@ def test_job_logs_start_rejection_and_finish(session, caplog):
     assert any("test_job: rejected" in m for m in messages)
 
 
+def test_job_logs_the_result_message_so_the_server_log_has_the_reason(session, caplog):
+    """The reason a run stopped is in the log, not only in the refresh log table."""
+    caplog.set_level(logging.INFO, logger="nbaproj.ingestion.runs")
+
+    reason = "stopped after 5 consecutive NBA errors"
+    _run(session, lambda _lease: RunResult("failed", message=reason))
+
+    finished = [r.getMessage() for r in caplog.records if "test_job: finished" in r.getMessage()]
+    assert len(finished) == 1 and reason in finished[0]
+
+
 def test_guarded_records_an_expected_error_and_rolls_back(session):
     """An expected error becomes a message, and the half-done work is rolled back."""
     session.add(Team(team_id=1, tricode="AAA", name="Alphas", city="Alpha"))

@@ -189,11 +189,12 @@ class Job(Generic[R]):
             session.rollback()
             logger.exception("%s: finished but could not record it in the refresh log", self.name)
         logger.info(
-            "%s: finished status=%s rows=%d in %.1fs",
+            "%s: finished status=%s rows=%d in %.1fs: %s",
             self.name,
             result.status,
             result.rows_upserted,
             (clock() - began).total_seconds(),
+            result.message or "no message",
         )
         return result
 

@@ -37,7 +37,7 @@ file; set them in your shell or in the host's settings, never in the repository)
 | `OWNER_NAME` | no | Your name in the app; default `owner`. |
 | `DATABASE_URL` | no | The database; default `sqlite:///nbaproj.db` in the folder you run from. |
 | `APP_TIMEZONE` | no | An IANA timezone such as `America/New_York`; default `UTC`. |
-| `REFRESH_TOKEN` | no | At least 32 random characters (make one the same way as `SESSION_SECRET`). When set, the scheduled job below can call `POST /refresh` with `Authorization: Bearer <token>`. Without it only the Refresh now button works. |
+| `REFRESH_TOKEN` | no | At least 32 random characters (make one the same way as `SESSION_SECRET`); unset or blank means no token. When set, the scheduled job below can call `POST /refresh` with `Authorization: Bearer <token>`. Without it only the Refresh now button works. |
 
 Start it locally in PowerShell (the variables last only for that window):
 

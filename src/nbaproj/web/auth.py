@@ -96,12 +96,16 @@ async def login(request: Request, password: str = Form("")) -> Response:
     address = request.client.host if request.client else "unknown"
     wait = limiter.retry_after(address)
     if wait:
-        logger.warning("Login refused for locked-out address %s", address)
+        logger.warning("Login refused for locked-out address %r", address)
         raise HTTPException(status_code=429, headers={"Retry-After": str(wait)})
+    # The guess is counted before the slow check, with no await in between: guesses that
+    # arrive together are counted together, so only five can be checked per lockout. A
+    # correct password clears the count again. (Counting after the check would let every
+    # in-flight guess through, because they all pass the lockout test before any failure lands.)
+    limiter.record_failure(address)
     # Argon2 is deliberately slow and memory-hungry: in a worker thread it cannot stall the loop.
     if not await run_in_threadpool(verify_password, settings.password_hash, password):
-        logger.warning("Failed login from %s", address)
-        limiter.record_failure(address)
+        logger.warning("Failed login from %r", address)
         return _login_page(request, status_code=401, error=LOGIN_ERROR)
     limiter.record_success(address)
     request.session.clear()

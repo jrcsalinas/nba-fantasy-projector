@@ -66,7 +66,7 @@ async def authorize_refresh(request: Request) -> str:
         if _bearer_matches(header, request.app.state.settings.refresh_token):
             return TRIGGER_CRON
         address = request.client.host if request.client else "unknown"
-        logger.warning("Refresh refused: bad bearer token from %s", address)
+        logger.warning("Refresh refused: bad bearer token from %r", address)
         raise HTTPException(status_code=401, headers={"WWW-Authenticate": "Bearer"})
     require_login(request)
     await verify_csrf(request)

@@ -49,7 +49,9 @@ def _latest_run(session: Session, now: datetime) -> RefreshLog | None:
 
     A run that is still going holds the refresh lock (long jobs renew it). A ``running``
     row with no live lock belongs to a process that died; the log only marks it abandoned
-    when the next run starts, so it must not count as running until then.
+    when the next run starts, so it must not count as running until then. (There is a gap of
+    a few milliseconds between a run writing its row and taking its lock, in which the banner
+    still shows the previous state; the next poll corrects it.)
     """
     live_lock = exists().where(JobLock.name == LOCK_NAME, JobLock.expires_at > now)
     gone = and_(RefreshLog.status == STATUS_RUNNING, ~live_lock)

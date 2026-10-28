@@ -108,7 +108,7 @@ def test_a_refused_bearer_token_is_logged_without_the_token(make_client, caplog)
     with caplog.at_level(logging.WARNING):
         client.post("/refresh", headers=_bearer(wrong))
 
-    assert "Refresh refused: bad bearer token from testclient" in caplog.text
+    assert "Refresh refused: bad bearer token from 'testclient'" in caplog.text
     assert TOKEN not in caplog.text and wrong not in caplog.text
 
 
