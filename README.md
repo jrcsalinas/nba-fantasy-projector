@@ -37,6 +37,7 @@ file; set them in your shell or in the host's settings, never in the repository)
 | `OWNER_NAME` | no | Your name in the app; default `owner`. |
 | `DATABASE_URL` | no | The database; default `sqlite:///nbaproj.db` in the folder you run from. |
 | `APP_TIMEZONE` | no | An IANA timezone such as `America/New_York`; default `UTC`. |
+| `REFRESH_TOKEN` | no | At least 32 random characters (make one the same way as `SESSION_SECRET`). When set, the scheduled job below can call `POST /refresh` with `Authorization: Bearer <token>`. Without it only the Refresh now button works. |
 
 Start it locally in PowerShell (the variables last only for that window):
 
@@ -58,6 +59,63 @@ put a player on your roster, tap Remove (it asks first) to take one off, and ope
 changes" for the history of every add and remove. Search and edits update in place with
 a small bundled script (htmx). The search box needs JavaScript; the Add and Remove
 buttons also work as plain form posts that reload the page.
+
+## Refreshing the data
+
+Every signed-in page has a banner at the top: when the data was last checked, "Refreshing
+data..." while a run is going, "The last refresh failed at ..." if the latest run failed
+(the data shown is from the last good check), and "Data may be out of date" after 24 hours
+without a check. Tap **Refresh now** to start a run; the banner updates by itself when it
+ends. `POST /refresh` answers at once and runs in the background:
+
+| Answer | Meaning |
+|---|---|
+| `202 {"status": "started"}` | A run began. |
+| `200 {"status": "recent"}` | A run started, finished or found nothing new less than 10 minutes ago, so nothing new began. A failed run never blocks a retry. |
+| `409 {"status": "running"}` | A refresh (this app's or one run from a laptop) holds the shared lock. |
+| `401` | A wrong or missing bearer token (or `REFRESH_TOKEN` is not set). |
+
+### Scheduled refresh
+
+The host sleeps when idle, so a GitHub Actions job wakes it and asks for a refresh a few
+times each night. Add two repository secrets (Settings, Secrets and variables, Actions):
+`APP_URL` (for example `https://your-app.onrender.com`, no trailing slash) and
+`REFRESH_TOKEN` (the same value as on the host). Then add this file as
+`.github/workflows/refresh.yml`:
+
+```yaml
+name: Refresh NBA data
+on:
+  schedule:
+    - cron: "30 4,6,9,14 * * *"   # UTC; late West Coast games end about 05:30 UTC
+  workflow_dispatch:
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ask the app to refresh
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
+        run: |
+          # Retries cover a cold start (the host, then the database).
+          for attempt in 1 2 3 4 5 6; do
+            code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 90 -X POST \
+              -H "Authorization: Bearer $REFRESH_TOKEN" "$APP_URL/refresh" || true)
+            echo "attempt $attempt: HTTP $code"
+            case "$code" in
+              200|202|409) exit 0 ;;
+              401) echo "the token was refused" >&2; exit 1 ;;
+            esac
+            sleep $((attempt * 30))
+          done
+          echo "the app did not accept the refresh" >&2
+          exit 1
+```
+
+A failed run turns red and GitHub emails you. GitHub can pause scheduled workflows in a
+repository with no activity for 60 days; the banner's "may be out of date" warning is how
+you would notice.
 
 ## Scope
 
