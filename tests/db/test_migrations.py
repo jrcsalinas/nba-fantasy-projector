@@ -1,5 +1,6 @@
 """Tests for the Alembic migrations."""
 
+import io
 from pathlib import Path
 
 import pytest
@@ -11,7 +12,8 @@ from sqlalchemy import create_engine, inspect
 
 from nbaproj.db.models import Base
 
-CORE_TABLES = {"team", "player", "game", "game_log", "refresh_log", "job_lock"}
+from tests.db.tables import CORE_TABLES
+
 ALEMBIC_INI = Path(__file__).resolve().parents[2] / "alembic.ini"
 
 
@@ -76,3 +78,22 @@ def test_game_log_has_a_player_id_index_after_migration(migration_setup):
     indexes = inspect(engine).get_indexes("game_log")
 
     assert any(index["column_names"] == ["player_id"] for index in indexes)
+
+
+def test_migration_renders_valid_postgres_ddl_for_the_roster_tables():
+    """Postgres is not available here, so check the SQL the roster migration would send it."""
+    config = Config(str(ALEMBIC_INI))
+    config.set_main_option("sqlalchemy.url", "postgresql://user:secret@host/db")
+    config.output_buffer = io.StringIO()
+
+    command.upgrade(config, "0002:0003", sql=True)
+
+    ddl = config.output_buffer.getvalue()
+    assert "CREATE TABLE roster (" in ddl
+    assert "PRIMARY KEY (owner, player_id)" in ddl
+    assert "FOREIGN KEY(player_id) REFERENCES player (player_id)" in ddl
+    assert "CREATE TABLE roster_history (" in ddl
+    assert "id SERIAL NOT NULL" in ddl
+    index = "CREATE INDEX ix_roster_history_owner_changed_at ON roster_history"
+    assert f"{index} (owner, changed_at)" in ddl
+    assert "secret" not in ddl

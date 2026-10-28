@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import Float, ForeignKey, Index, Integer, String
+from sqlalchemy import Float, ForeignKey, Index, Integer, String, event
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from nbaproj.db.types import UtcDateTime
@@ -10,6 +10,10 @@ from nbaproj.db.types import UtcDateTime
 
 class Base(DeclarativeBase):
     """Declarative base for all models."""
+
+
+class AppendOnlyError(RuntimeError):
+    """Raised when code tries to change or delete a row that may only be added."""
 
 
 class Team(Base):
@@ -73,6 +77,44 @@ class GameLog(Base):
     tov: Mapped[int] = mapped_column(Integer)
     usage_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     source: Mapped[str] = mapped_column(String(16))
+
+
+class RosterEntry(Base):
+    """A player on an owner's roster. One row per owner and player."""
+
+    __tablename__ = "roster"
+
+    owner: Mapped[str] = mapped_column(String(64), primary_key=True)
+    player_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("player.player_id"), primary_key=True, autoincrement=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime)
+    source: Mapped[str] = mapped_column(String(16))
+
+
+class RosterChange(Base):
+    """One add or remove on a roster. History is only ever appended to."""
+
+    __tablename__ = "roster_history"
+    __table_args__ = (Index("ix_roster_history_owner_changed_at", "owner", "changed_at"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    owner: Mapped[str] = mapped_column(String(64))
+    player_id: Mapped[int] = mapped_column(Integer, ForeignKey("player.player_id"))
+    action: Mapped[str] = mapped_column(String(8))
+    changed_at: Mapped[datetime] = mapped_column(UtcDateTime)
+    source: Mapped[str] = mapped_column(String(16))
+
+
+@event.listens_for(RosterChange, "before_update")
+@event.listens_for(RosterChange, "before_delete")
+def _history_is_append_only(_mapper, _connection, _target) -> None:
+    """Refuse to change or delete a history row through the ORM.
+
+    This guards the application's own code paths. A raw bulk SQL statement does not go
+    through the ORM and is not stopped by it.
+    """
+    raise AppendOnlyError("roster_history rows can only be added, never changed or deleted")
 
 
 class RefreshLog(Base):
