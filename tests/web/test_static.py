@@ -37,13 +37,25 @@ def test_static_files_are_served_without_a_login(client):
     assert response.headers["x-content-type-options"] == "nosniff"
 
 
-@pytest.mark.parametrize("path", ["/static/nope.js", "/static/..%2Fapp.py", "/static/", "/static"])
-def test_static_mount_does_not_expose_anything_else(client, path):
-    """Missing files, parent folders, and the folder itself are all just not found."""
+@pytest.mark.parametrize(
+    ("path", "status"),
+    [
+        ("/static/nope.js", 404),
+        ("/static/..%2Fapp.py", 404),
+        ("/static/%2e%2e/app.py", 404),
+        ("/static/", 404),
+        ("/static", 307),
+    ],
+)
+def test_static_mount_does_not_expose_anything_else(client, path, status):
+    """Missing files, parent folders, and the folder itself are exactly as they should be."""
     response = client.get(path, follow_redirects=False)
 
-    assert response.status_code in (404, 307)
-    assert b"class App" not in response.content and b"def create_app" not in response.content
+    assert response.status_code == status
+    app_source = (Path(nbaproj.web.__file__).parent / "app.py").read_bytes()
+    assert response.content != app_source and b"def create_app" not in response.content
+    if status == 307:
+        assert response.headers["location"].endswith("/static/")
 
 
 def test_the_static_mount_is_the_only_extra_open_path(app):

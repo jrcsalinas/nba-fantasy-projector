@@ -21,9 +21,9 @@ from starlette.templating import Jinja2Templates
 
 from nbaproj.config import ConfigError, load_settings
 from nbaproj.db.session import create_db_engine
-from nbaproj.roster.directory import PlayerDirectory, default_directory
 from nbaproj.ingestion.client import LiveNbaClient
 from nbaproj.ingestion.runs import utc_now
+from nbaproj.roster.directory import PlayerDirectory, default_directory
 from nbaproj.web.auth import (
     SESSION_OWNER,
     NotSignedIn,
@@ -152,7 +152,11 @@ def create_app(
     @app.exception_handler(NotSignedIn)
     async def not_signed_in(request: Request, _exc: NotSignedIn) -> Response:
         if request.headers.get("HX-Request"):
-            return _error_page(request, 401)
+            # HTMX swaps nothing on a 401, so tell it where to go: a stale tab or an
+            # expired session lands on the login page instead of failing silently.
+            response = _error_page(request, 401)
+            response.headers["HX-Redirect"] = "/login"
+            return response
         return RedirectResponse("/login", status_code=303)
 
     @app.exception_handler(RequestValidationError)
@@ -173,7 +177,7 @@ def create_app(
         logger.error("Unhandled error on %s", request.url.path, exc_info=exc)
         return apply_security_headers(_error_page(request, 500))
 
-    @app.get("/healthz")
+    @app.api_route("/healthz", methods=["GET", "HEAD"])
     async def healthz() -> dict[str, str]:
         return {"status": "ok"}
 

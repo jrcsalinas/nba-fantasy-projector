@@ -5,13 +5,17 @@ in clears the old session and issues a new token, so nothing from before carries
 """
 
 import hmac
+import logging
 import secrets
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response
+from starlette.concurrency import run_in_threadpool
 from starlette.responses import RedirectResponse
 from starlette.templating import Jinja2Templates
 
 from nbaproj.web.security import LoginLimiter, verify_password
+
+logger = logging.getLogger(__name__)
 
 SESSION_OWNER = "owner"
 SESSION_CSRF = "csrf"
@@ -92,8 +96,11 @@ async def login(request: Request, password: str = Form("")) -> Response:
     address = request.client.host if request.client else "unknown"
     wait = limiter.retry_after(address)
     if wait:
+        logger.warning("Login refused for locked-out address %s", address)
         raise HTTPException(status_code=429, headers={"Retry-After": str(wait)})
-    if not verify_password(settings.password_hash, password):
+    # Argon2 is deliberately slow and memory-hungry: in a worker thread it cannot stall the loop.
+    if not await run_in_threadpool(verify_password, settings.password_hash, password):
+        logger.warning("Failed login from %s", address)
         limiter.record_failure(address)
         return _login_page(request, status_code=401, error=LOGIN_ERROR)
     limiter.record_success(address)

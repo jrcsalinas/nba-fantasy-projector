@@ -87,3 +87,10 @@ def test_create_app_from_env_fails_clearly_when_a_secret_is_missing(monkeypatch,
 
     with pytest.raises(ConfigError, match=missing):
         create_app_from_env()
+
+
+def test_healthz_answers_head_requests(client):
+    """Uptime monitors and some hosts probe with HEAD: it must work, with no body."""
+    response = client.head("/healthz")
+
+    assert response.status_code == 200 and response.content == b""

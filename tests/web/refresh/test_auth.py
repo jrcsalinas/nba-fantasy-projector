@@ -1,5 +1,7 @@
 """Tests for who may call POST /refresh: the cron's bearer token, or you with a CSRF token."""
 
+import logging
+
 import pytest
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -96,3 +98,25 @@ def test_a_signed_out_request_is_redirected_to_login_and_starts_nothing(make_cli
     assert browser.status_code == 303 and browser.headers["location"] == "/login"
     assert htmx.status_code == 401
     assert _runs(engine) == 0
+
+
+def test_a_refused_bearer_token_is_logged_without_the_token(make_client, caplog):
+    """A stranger guessing at /refresh leaves a trace: the address, never either token."""
+    client = make_client(signed_in=False, REFRESH_TOKEN=TOKEN)
+    wrong = "wrong-" + "w" * 30
+
+    with caplog.at_level(logging.WARNING):
+        client.post("/refresh", headers=_bearer(wrong))
+
+    assert "Refresh refused: bad bearer token from testclient" in caplog.text
+    assert TOKEN not in caplog.text and wrong not in caplog.text
+
+
+def test_an_htmx_request_after_the_session_ends_is_sent_to_the_login_page(make_client):
+    """HTMX swaps nothing on a 401, so a stale tab (or an expired session) says where to go."""
+    client = make_client(signed_in=False)
+
+    response = client.get("/refresh/status", headers={"HX-Request": "true"})
+
+    assert response.status_code == 401
+    assert response.headers["hx-redirect"] == "/login"

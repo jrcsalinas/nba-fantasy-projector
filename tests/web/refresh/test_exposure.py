@@ -6,7 +6,13 @@ from tests.web.helpers import api_routes, csrf_token
 
 TOKEN = "cron-token-" + "c" * 30
 BEARER = {"Authorization": f"Bearer {TOKEN}"}
-OPEN = {("GET", "/login"), ("POST", "/login"), ("GET", "/healthz"), ("POST", "/refresh")}
+OPEN = {
+    ("GET", "/login"),
+    ("POST", "/login"),
+    ("GET", "/healthz"),
+    ("HEAD", "/healthz"),
+    ("POST", "/refresh"),
+}
 
 
 def test_refresh_is_the_only_route_that_does_its_own_authentication(make_client):
