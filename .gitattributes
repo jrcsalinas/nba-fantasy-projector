@@ -1,0 +1,5 @@
+# Vendored third-party files are stored byte for byte: git must never rewrite their line
+# endings, or a pinned hash (see tests/web/test_static.py) or a license text could differ
+# between checkouts. Today htmx.min.js has no line breaks at all, so this really protects
+# the license file and any vendored file added later.
+src/nbaproj/web/static/* -text

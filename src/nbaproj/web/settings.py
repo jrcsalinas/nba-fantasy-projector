@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from argon2 import extract_parameters
 from argon2.exceptions import InvalidHashError
 
-from nbaproj.config import ConfigError
+from nbaproj.config import ConfigError, load_settings
 
 MIN_SECRET_LENGTH = 32
 MAX_OWNER_NAME_LENGTH = 64
@@ -25,6 +25,7 @@ class WebSettings:
     password_hash: str = field(repr=False)
     cookie_secure: bool = True
     owner_name: str = DEFAULT_OWNER_NAME
+    timezone: str = "UTC"
 
 
 def _required(env: Mapping[str, str], name: str) -> str:
@@ -74,4 +75,5 @@ def load_web_settings(env: Mapping[str, str]) -> WebSettings:
         password_hash=_password_hash(env),
         cookie_secure=_cookie_secure(env),
         owner_name=_owner_name(env),
+        timezone=load_settings(env).app_timezone,
     )

@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}My roster{% endblock %}
+{% block scripts %}<script src="/static/htmx.min.js" defer></script>{% endblock %}
+{% block body_attrs %}hx-headers='{{ {"X-CSRF-Token": csrf_token} | tojson }}'{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>My roster</h1>
+  <label for="q">Find a player</label>
+  <input id="q" name="q" type="search" autocomplete="off" placeholder="Start typing a name"
+         hx-get="/roster/search" hx-trigger="input changed delay:250ms, search"
+         hx-target="#search-results" hx-swap="innerHTML">
+  <div id="search-results" aria-live="polite"></div>
+  <div id="roster-panel">
+    {% include "_panel.html" %}
+  </div>
+  <p class="muted"><a href="/">Back to the start</a></p>
+</div>
+{% endblock %}

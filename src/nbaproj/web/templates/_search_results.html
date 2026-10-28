@@ -1,0 +1,23 @@
+{% if too_short %}
+<p class="muted">Type at least 2 letters to search.</p>
+{% elif not matches %}
+<p class="muted">No players found for &ldquo;{{ query }}&rdquo;.</p>
+{% else %}
+<ul class="matches">
+  {% for match in matches %}
+  <li class="match">
+    <span>{{ match.name }}</span>
+    {% if match.player_id in on_roster %}
+    <span class="muted">On your roster</span>
+    {% else %}
+    <form method="post" action="/roster/add" hx-post="/roster/add" hx-target="#roster-panel"
+          hx-swap="innerHTML">
+      <input type="hidden" name="player_id" value="{{ match.player_id }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit">Add</button>
+    </form>
+    {% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}

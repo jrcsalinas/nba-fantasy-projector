@@ -1,0 +1,30 @@
+<p class="message" role="status" aria-live="polite">{{ message }}</p>
+{% if players %}
+<ul class="players">
+  {% for player in players %}
+  <li class="player">
+    <span>{{ player.name }}</span>
+    <form method="post" action="/roster/remove" hx-post="/roster/remove" hx-target="#roster-panel"
+          hx-swap="innerHTML" hx-confirm="Remove {{ player.name }} from your roster?">
+      <input type="hidden" name="player_id" value="{{ player.player_id }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit">Remove</button>
+    </form>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="muted">No players yet. Search above to add your first player.</p>
+{% endif %}
+<h2>Recent changes</h2>
+{% if changes %}
+<ul class="changes">
+  {% for change in changes %}
+  <li class="change">{{ "Added" if change.action == "add" else "Removed" }} {{ change.name }}
+    <time datetime="{{ change.changed_at.isoformat() }}">{{ change.changed_at | local_time }}</time></li>
+  {% endfor %}
+</ul>
+<p><a href="/roster/history">All changes</a></p>
+{% else %}
+<p class="muted">No changes yet.</p>
+{% endif %}

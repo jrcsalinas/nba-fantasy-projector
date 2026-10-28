@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Roster history{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Roster history</h1>
+  {% if changes %}
+  <p class="muted">Your last {{ limit }} changes at most, newest first.</p>
+  <ul class="changes">
+    {% for change in changes %}
+    <li class="change">{{ "Added" if change.action == "add" else "Removed" }} {{ change.name }}
+      <time datetime="{{ change.changed_at.isoformat() }}">{{ change.changed_at | local_time }}</time>
+      <span class="muted">{{ change.source }}</span></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">No changes yet.</p>
+  {% endif %}
+  <p class="muted"><a href="/roster">Back to my roster</a></p>
+</div>
+{% endblock %}

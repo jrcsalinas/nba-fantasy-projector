@@ -4,7 +4,8 @@
 <div class="card">
   <h1>NBA Fantasy Projector</h1>
   <p>Signed in as {{ owner }}</p>
-  <p class="muted">Your roster and suggestions will appear here.</p>
+  <p><a href="/roster">My roster</a></p>
+  <p class="muted">Trends and suggestions will appear here.</p>
   <form method="post" action="/logout">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <button type="submit">Sign out</button>

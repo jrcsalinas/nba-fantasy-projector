@@ -70,3 +70,20 @@ def test_settings_errors_and_repr_never_contain_the_secret(web_env):
     web_env["PASSWORD_HASH"] = "$argon2id$v=19$m=8,t=1,p=1$c2FsdHNhbHQ$aGFzaGhhc2hoYXNo"
     shown = repr(load_web_settings(web_env))
     assert TEST_SECRET not in shown and "$argon2id" not in shown
+
+
+def test_web_settings_reads_the_timezone(web_env):
+    """Pages show times in APP_TIMEZONE, which defaults to UTC."""
+    assert load_web_settings(web_env).timezone == "UTC"
+
+    web_env["APP_TIMEZONE"] = "Pacific/Auckland"
+
+    assert load_web_settings(web_env).timezone == "Pacific/Auckland"
+
+
+def test_web_settings_rejects_a_bad_timezone(web_env):
+    """A timezone name that does not exist stops startup and names the variable."""
+    web_env["APP_TIMEZONE"] = "Not/AZone"
+
+    with pytest.raises(ConfigError, match="APP_TIMEZONE"):
+        load_web_settings(web_env)

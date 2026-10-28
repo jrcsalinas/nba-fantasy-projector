@@ -50,6 +50,15 @@ python -m uvicorn nbaproj.web.app:create_app_from_env --factory --port 8000
 Then open http://localhost:8000. Five wrong passwords lock an address out for 15
 minutes (held in memory, so a restart clears it).
 
+The database needs its tables first: run `python -m alembic upgrade head` once (and
+again after an update) with the same `DATABASE_URL`.
+
+**My roster** (`/roster`, linked from the home page): type a name to search, tap Add to
+put a player on your roster, tap Remove (it asks first) to take one off, and open "All
+changes" for the history of every add and remove. Search and edits update in place with
+a small bundled script (htmx). The search box needs JavaScript; the Add and Remove
+buttons also work as plain form posts that reload the page.
+
 ## Scope
 
 - In scope: projections, draft rankings, lineup and waiver/trade analysis
