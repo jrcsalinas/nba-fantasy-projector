@@ -5,16 +5,35 @@ cron has no session. It does its own check instead: see ``authorize_refresh``.
 """
 
 import hmac
-from fastapi import APIRouter, Depends, HTTPException, Request
+import logging
+from datetime import datetime, timedelta
+
+from fastapi import APIRouter, BackgroundTasks, Depends, FastAPI, HTTPException, Request
+from sqlalchemy import exists, select
+from sqlalchemy.orm import Session
 from starlette.responses import JSONResponse
 
+from nbaproj.db.models import JobLock, RefreshLog
+from nbaproj.ingestion.refresh import LOCK_NAME, ingest_final_games
 from nbaproj.web.auth import require_login, verify_csrf
+from nbaproj.web.db import get_session
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 TRIGGER_CRON = "cron"
 TRIGGER_UI = "ui"
 BEARER_SCHEME = "bearer"
+
+# The minimum time between real runs: a run that is running, succeeded, or skipped this
+# recently means a new request starts nothing. A failed run does not count, so the cron's
+# retry after a failure is never turned away.
+MIN_INTERVAL = timedelta(minutes=10)
+RECENT_STATUSES = ("running", "succeeded", "skipped")
+
+STARTED, RECENT, RUNNING = "started", "recent", "running"
+STATUS_CODES = {STARTED: 202, RECENT: 200, RUNNING: 409}
 
 
 def _bearer_matches(header: str, token: str | None) -> bool:
@@ -44,7 +63,45 @@ async def authorize_refresh(request: Request) -> str:
     return TRIGGER_UI
 
 
-@router.post("/refresh", status_code=202, dependencies=[Depends(authorize_refresh)])
-def refresh() -> JSONResponse:
-    """Accept a refresh request from an authorized caller (it does not start a run yet)."""
-    return JSONResponse({"status": "accepted"}, status_code=202)
+def decide(session: Session, now: datetime) -> str:
+    """What a request to refresh should do now: ``running``, ``recent``, or ``started``.
+
+    The lock is the shared one, so a laptop run counts as running. Deciding before the run
+    means a refused request writes nothing to the refresh log.
+    """
+    locked = exists().where(JobLock.name == LOCK_NAME, JobLock.expires_at > now)
+    if session.scalar(select(locked)):
+        return RUNNING
+    recent = exists().where(
+        RefreshLog.status.in_(RECENT_STATUSES), RefreshLog.started_at > now - MIN_INTERVAL
+    )
+    if session.scalar(select(recent)):
+        return RECENT
+    return STARTED
+
+
+def run_refresh(app: FastAPI, trigger: str) -> None:
+    """The background run: ingest on its own session. Nothing escapes into the server.
+
+    ``ingest_final_games`` records an unexpected error in the refresh log before it
+    raises; this logs the traceback and stops it there.
+    """
+    try:
+        with Session(app.state.engine) as session:
+            ingest_final_games(session, app.state.nba_client, trigger, app.state.clock)
+    except Exception:  # pylint: disable=broad-exception-caught
+        logger.exception("Background refresh crashed")
+
+
+@router.post("/refresh")
+def refresh(
+    request: Request,
+    background: BackgroundTasks,
+    trigger: str = Depends(authorize_refresh),
+    session: Session = Depends(get_session),
+) -> JSONResponse:
+    """Start a refresh in the background unless one is running or one just ran."""
+    outcome = decide(session, request.app.state.clock())
+    if outcome == STARTED:
+        background.add_task(run_refresh, request.app, trigger)
+    return JSONResponse({"status": outcome}, status_code=STATUS_CODES[outcome])

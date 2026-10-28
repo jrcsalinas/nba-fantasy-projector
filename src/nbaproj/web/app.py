@@ -22,6 +22,7 @@ from starlette.templating import Jinja2Templates
 from nbaproj.config import ConfigError, load_settings
 from nbaproj.db.session import create_db_engine
 from nbaproj.roster.directory import PlayerDirectory, default_directory
+from nbaproj.ingestion.client import LiveNbaClient
 from nbaproj.ingestion.runs import utc_now
 from nbaproj.web.auth import (
     SESSION_OWNER,
@@ -129,7 +130,8 @@ def create_app(
     app.state.owns_engine = False
     app.state.directory = directory if directory is not None else default_directory()
     app.state.login_limiter = limiter or LoginLimiter()
-    app.state.clock = utc_now  # tests replace it to fix the time
+    app.state.clock = utc_now  # tests replace both of these
+    app.state.nba_client = LiveNbaClient()
     templates = Jinja2Templates(directory=str(TEMPLATES_DIR), context_processors=[_page_context])
     templates.env.filters["local_time"] = _local_time(settings.timezone)
     app.state.templates = templates
