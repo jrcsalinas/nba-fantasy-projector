@@ -49,7 +49,19 @@ python -m uvicorn nbaproj.web.app:create_app_from_env --factory --port 8000
 ```
 
 Then open http://localhost:8000. Five wrong passwords lock an address out for 15
-minutes (held in memory, so a restart clears it).
+minutes. Failed logins, lockouts and refused refresh tokens are logged as warnings (the
+address only, never a password or token).
+
+Limits worth knowing before you put it on the internet:
+
+- **Signing out does not revoke a stolen cookie.** The session is a signed cookie valid for
+  7 days; logging out clears your browser's copy, and the server keeps no list of sessions.
+  To end every session at once (a lost phone), change `SESSION_SECRET` and restart.
+- **The lockout is per address, in memory.** A restart clears it, and with several worker
+  processes each has its own count. Behind a proxy, start uvicorn with `--proxy-headers`
+  and set `--forwarded-allow-ips` to the proxy's address only (not `*`, unless the proxy
+  overwrites `X-Forwarded-For`); otherwise every visitor looks like the proxy and one
+  attacker can lock you out, or a visitor can pretend to be any address and skip the lockout.
 
 The database needs its tables first: run `python -m alembic upgrade head` once (and
 again after an update) with the same `DATABASE_URL`.
@@ -64,8 +76,9 @@ buttons also work as plain form posts that reload the page.
 
 Every signed-in page has a banner at the top: when the data was last checked, "Refreshing
 data..." while a run is going, "The last refresh failed at ..." if the latest run failed
-(the data shown is from the last good check), and "Data may be out of date" after 24 hours
-without a check. Tap **Refresh now** to start a run; the banner updates by itself when it
+(the data shown is from the last good check; the reason is not shown on the page, because
+it can contain internals, and is in the server log and the `refresh_log` table), and "Data
+may be out of date" after 24 hours without a check. Tap **Refresh now** to start a run; the banner updates by itself when it
 ends. `POST /refresh` answers at once and runs in the background:
 
 | Answer | Meaning |
@@ -113,9 +126,11 @@ jobs:
           exit 1
 ```
 
-A failed run turns red and GitHub emails you. GitHub can pause scheduled workflows in a
-repository with no activity for 60 days; the banner's "may be out of date" warning is how
-you would notice.
+The job turns red (and GitHub emails you) only when the app never accepts the request. It
+cannot see whether the refresh itself then succeeds, because that runs in the background
+after the answer: a failed refresh shows in the banner, and "may be out of date" appears
+after 24 hours without a good check. GitHub can pause scheduled workflows in a repository
+with no activity for 60 days; that banner warning is how you would notice.
 
 ## Scope
 
