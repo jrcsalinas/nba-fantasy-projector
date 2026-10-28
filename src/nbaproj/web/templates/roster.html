@@ -1,7 +1,5 @@
 {% extends "base.html" %}
 {% block title %}My roster{% endblock %}
-{% block scripts %}<script src="/static/htmx.min.js" defer></script>{% endblock %}
-{% block body_attrs %}hx-headers='{{ {"X-CSRF-Token": csrf_token} | tojson }}'{% endblock %}
 {% block content %}
 <div class="card">
   <h1>My roster</h1>

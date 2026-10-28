@@ -1,0 +1,17 @@
+<div id="freshness" class="banner banner-{{ freshness.state }}" role="status">
+  {% if freshness.state == "never" %}
+  No data check yet.
+  {% elif freshness.state == "running" %}
+  Refreshing data...
+  {% elif freshness.state == "failed" %}
+  The last refresh failed at {{ freshness.failed_at | local_time }}: {{ freshness.message }}.
+  {% if freshness.last_checked %}Showing data from {{ freshness.last_checked | local_time }}.{% endif %}
+  {% elif freshness.state == "stale" %}
+  Data may be out of date: last checked {{ freshness.last_checked | local_time }}.
+  {% else %}
+  Data checked {{ freshness.last_checked | local_time }}.
+  {% if freshness.last_loaded and freshness.last_loaded != freshness.last_checked %}
+  New games loaded {{ freshness.last_loaded | local_time }}.
+  {% endif %}
+  {% endif %}
+</div>

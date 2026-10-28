@@ -1,10 +1,14 @@
 """Helpers shared by the web tests."""
 
 import re
+from datetime import datetime, timedelta
 from collections.abc import Iterator, Sequence
 
 from fastapi.routing import APIRoute
+from sqlalchemy.orm import Session
 from starlette.routing import Mount
+
+from nbaproj.db.models import RefreshLog
 
 from tests.web.conftest import TEST_PASSWORD
 
@@ -46,3 +50,26 @@ def api_routes(routes: Sequence, prefix: str = "") -> Iterator[tuple[str, str]]:
             continue
         else:
             raise AssertionError(f"cannot inspect route {route!r}; update api_routes()")
+
+
+def add_log(
+    session: Session,
+    now: datetime,
+    status: str,
+    ago: timedelta,
+    message: str | None = None,
+) -> None:
+    """Add a refresh log row that began ``ago`` before ``now`` (it finished a minute later)."""
+    started = now - ago
+    finished = None if status == "running" else started + timedelta(minutes=1)
+    session.add(
+        RefreshLog(
+            trigger="cron",
+            started_at=started,
+            finished_at=finished,
+            status=status,
+            message=message,
+            rows_upserted=0,
+        )
+    )
+    session.commit()

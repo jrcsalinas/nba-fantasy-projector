@@ -22,11 +22,14 @@
     .message { min-height: 1.5rem; margin: 1rem 0 0; }
     .error { color: #b00020; }
     .muted { color: var(--muted); }
+    .banner { margin: 0 0 1rem; padding: .5rem .75rem; border: 1px solid var(--line); border-radius: 8px; background: var(--card); font-size: .9rem; }
+    .banner-failed, .banner-stale { border-color: #b00020; }
   </style>
-  {% block scripts %}{% endblock %}
+  {% if signed_in %}<script src="/static/htmx.min.js" defer></script>{% endif %}
 </head>
-<body {% block body_attrs %}{% endblock %}>
+<body{% if signed_in %} hx-headers='{{ {"X-CSRF-Token": csrf_token} | tojson }}'{% endif %}>
   <main>
+    {% if freshness %}{% include "_freshness.html" %}{% endif %}
     {% block content %}{% endblock %}
   </main>
 </body>

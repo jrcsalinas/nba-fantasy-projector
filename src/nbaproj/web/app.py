@@ -12,6 +12,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
 from sqlalchemy import Engine
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import RedirectResponse
@@ -21,7 +22,15 @@ from starlette.templating import Jinja2Templates
 from nbaproj.config import ConfigError, load_settings
 from nbaproj.db.session import create_db_engine
 from nbaproj.roster.directory import PlayerDirectory, default_directory
-from nbaproj.web.auth import NotSignedIn, open_router, protected_router
+from nbaproj.ingestion.runs import utc_now
+from nbaproj.web.auth import (
+    SESSION_OWNER,
+    NotSignedIn,
+    csrf_token_for,
+    open_router,
+    protected_router,
+)
+from nbaproj.web.freshness import load_freshness
 from nbaproj.web.roster_routes import router as roster_router
 from nbaproj.web.security import LoginLimiter
 from nbaproj.web.settings import WebSettings, load_web_settings
@@ -72,6 +81,25 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.engine.dispose()
 
 
+def _page_context(request: Request) -> dict:
+    """Template context for every page: the signed-in state, CSRF token, and the banner.
+
+    A page never fails because the banner could not be read: with no database, or one
+    that errors, the banner is simply left out.
+    """
+    if not request.session.get(SESSION_OWNER):
+        return {"signed_in": False, "freshness": None}
+    context = {"signed_in": True, "csrf_token": csrf_token_for(request), "freshness": None}
+    engine = request.app.state.engine
+    if engine is not None:
+        try:
+            with Session(engine) as session:
+                context["freshness"] = load_freshness(session, request.app.state.clock())
+        except SQLAlchemyError:
+            logger.exception("Could not read the refresh log for the banner")
+    return context
+
+
 def _local_time(zone_name: str) -> Callable[[datetime], str]:
     """A template filter that shows a stored UTC time in the configured timezone."""
     zone = ZoneInfo(zone_name)
@@ -100,7 +128,8 @@ def create_app(
     app.state.owns_engine = False
     app.state.directory = directory if directory is not None else default_directory()
     app.state.login_limiter = limiter or LoginLimiter()
-    templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+    app.state.clock = utc_now  # tests replace it to fix the time
+    templates = Jinja2Templates(directory=str(TEMPLATES_DIR), context_processors=[_page_context])
     templates.env.filters["local_time"] = _local_time(settings.timezone)
     app.state.templates = templates
 

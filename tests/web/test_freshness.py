@@ -5,8 +5,9 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from sqlalchemy.orm import Session
 
-from nbaproj.db.models import RefreshLog
 from nbaproj.web.freshness import MESSAGE_LIMIT, load_freshness
+
+from tests.web.helpers import add_log
 
 NOW = datetime(2026, 10, 29, 12, 0, tzinfo=timezone.utc)
 HOUR = timedelta(hours=1)
@@ -20,20 +21,7 @@ def session_fixture(engine):
 
 
 def _run(session: Session, status: str, ago: timedelta, message: str | None = None) -> None:
-    """Add a log row that began ``ago`` before NOW (finished a minute later unless running)."""
-    started = NOW - ago
-    finished = None if status == "running" else started + timedelta(minutes=1)
-    session.add(
-        RefreshLog(
-            trigger="cron",
-            started_at=started,
-            finished_at=finished,
-            status=status,
-            message=message,
-            rows_upserted=0,
-        )
-    )
-    session.commit()
+    add_log(session, NOW, status, ago, message)
 
 
 def test_no_runs_means_never_checked(session):
