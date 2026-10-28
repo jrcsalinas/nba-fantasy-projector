@@ -5,10 +5,15 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import func, select
 
 from nbaproj.db.locks import acquire_lock
-from nbaproj.db.models import Game, GameLog, JobLock, RefreshLog
+from nbaproj.db.models import Game, GameLog, JobLock, RefreshLog, Team
 from nbaproj.ingestion.client import NbaClientError
 from nbaproj.ingestion.refresh import LOCK_NAME, ingest_final_games
-from tests.ingestion.fakes import FakeClient, boxscore_for, only_games
+from tests.ingestion.fakes import (
+    FakeClient,
+    boxscore_for,
+    only_games,
+    scoreboard_with_ids,
+)
 
 
 NOW = datetime(2025, 10, 29, 5, 0, tzinfo=timezone.utc)
@@ -130,3 +135,64 @@ def test_ingest_reports_failed_when_scoreboard_is_unreachable(session):
     assert (result.status, result.games_loaded) == ("failed", 0)
     assert "scoreboard down" in session.scalars(select(RefreshLog.message)).one()
     assert _count(session, JobLock) == 0
+
+
+def test_ingest_skips_all_star_and_cup_games_without_crashing(session, scoreboard_payload):
+    """Games with non-fantasy prefixes are skipped and the run still finishes."""
+    client = FakeClient(
+        scoreboard_with_ids(scoreboard_payload, "0032500001", "0062500001"), {}
+    )
+
+    result = _run(session, client)
+
+    assert (result.status, result.games_loaded) == ("skipped", 0)
+    assert not client.boxscore_requests
+    assert session.scalars(select(RefreshLog.status)).one() == "skipped"
+
+
+def test_ingest_loads_games_the_schedule_marked_final_without_logs(
+    session, scoreboard_payload, boxscore_payload
+):
+    """A game stored as final but with no log rows still counts as new."""
+    session.add_all(
+        [
+            Team(team_id=1610612747, tricode="LAL", name="Lakers", city="Los Angeles"),
+            Team(team_id=1610612744, tricode="GSW", name="Warriors", city="Golden State"),
+        ]
+    )
+    session.commit()
+    session.add_all(
+        [
+            Game(
+                game_id=REGULAR,
+                season="2025-26",
+                game_type="regular_season",
+                tip_off_utc=NOW,
+                home_team_id=1610612747,
+                away_team_id=1610612744,
+                status="final",
+            ),
+        ]
+    )
+    session.commit()
+    client = FakeClient(
+        only_games(scoreboard_payload, REGULAR), {REGULAR: boxscore_payload}
+    )
+
+    result = _run(session, client)
+
+    assert (result.status, result.games_loaded) == ("succeeded", 1)
+    assert _count(session, GameLog) == 5
+
+
+def test_ingest_is_rejected_even_when_the_holder_has_the_same_job_name(
+    session, scoreboard_payload
+):
+    """Two runs of the same job must not share a lock holder name."""
+    acquire_lock(session, LOCK_NAME, "ingest_final_games", timedelta(hours=1), NOW)
+    client = FakeClient(scoreboard_payload, {})
+
+    result = _run(session, client)
+
+    assert result.status == "rejected"
+    assert not client.boxscore_requests

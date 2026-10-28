@@ -6,6 +6,7 @@ import pytest
 
 from nbaproj.ingestion.parsing import (
     TeamInfo,
+    fantasy_game_type,
     game_type_from_id,
     parse_boxscore,
     parse_minutes,
@@ -126,3 +127,20 @@ def test_parse_boxscore_handles_overtime_minutes(overtime_payload):
 
     expected = 100 * (26 + 0.44 * 8 + 5) * (265 / 5) / (44 * (95 + 0.44 * 28 + 13))
     assert box.lines[0].usage_pct == pytest.approx(expected)
+
+
+@pytest.mark.parametrize(
+    ("game_id", "expected"),
+    [
+        ("0022500001", "regular_season"),
+        ("0042500101", "playoffs"),
+        ("0052500001", "play_in"),
+        ("0012500003", None),
+        ("0032500001", None),
+        ("0062500001", None),
+        ("0092500001", None),
+    ],
+)
+def test_fantasy_game_type_keeps_only_countable_prefixes(game_id, expected):
+    """Regular season, playoffs and play-in count; everything else is None."""
+    assert fantasy_game_type(game_id) == expected

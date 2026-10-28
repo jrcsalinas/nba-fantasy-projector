@@ -40,3 +40,41 @@ def only_games(scoreboard: dict, *game_ids: str) -> dict:
         g for g in copy["scoreboard"]["games"] if g["gameId"] in game_ids
     ]
     return copy
+
+
+def scoreboard_with_ids(scoreboard: dict, *game_ids: str) -> dict:
+    """A scoreboard of final games with the given ids, copied from the first game."""
+    copy = json.loads(json.dumps(scoreboard))
+    template = copy["scoreboard"]["games"][0]
+    copy["scoreboard"]["games"] = [
+        {**template, "gameId": game_id, "gameStatus": 3} for game_id in game_ids
+    ]
+    return copy
+
+
+class FakeStatsClient:
+    """A StatsClient that serves canned payloads, or raises the ones that are errors."""
+
+    def __init__(self, schedule=None, player_log=None, team_log=None):
+        self.schedule = schedule
+        self.player_log = player_log
+        self.team_log = team_log
+        self.requests: list[tuple[str, str]] = []
+
+    def _serve(self, name: str, season: str, payload):
+        self.requests.append((name, season))
+        if isinstance(payload, Exception):
+            raise payload
+        return payload
+
+    def get_schedule(self, season: str) -> dict:
+        """Return the canned schedule."""
+        return self._serve("schedule", season, self.schedule)
+
+    def get_player_game_log(self, season: str) -> dict:
+        """Return the canned player game log."""
+        return self._serve("players", season, self.player_log)
+
+    def get_team_game_log(self, season: str) -> dict:
+        """Return the canned team game log."""
+        return self._serve("teams", season, self.team_log)

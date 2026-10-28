@@ -1,0 +1,18 @@
+{
+  "resource": "leaguegamelog",
+  "parameters": {"Season": "2025-26", "SeasonType": "Regular Season"},
+  "resultSets": [
+    {
+      "name": "LeagueGameLog",
+      "headers": ["SEASON_ID", "PLAYER_ID", "PLAYER_NAME", "TEAM_ID", "TEAM_ABBREVIATION", "TEAM_NAME", "GAME_ID", "GAME_DATE", "MATCHUP", "WL", "MIN", "FGM", "FGA", "FG_PCT", "FG3M", "FG3A", "FG3_PCT", "FTM", "FTA", "FT_PCT", "OREB", "DREB", "REB", "AST", "STL", "BLK", "TOV", "PF", "PTS", "PLUS_MINUS", "FANTASY_PTS", "VIDEO_AVAILABLE"],
+      "rowSet": [
+        ["22025", 1001, "Alex Home", 1610612747, "LAL", "Los Angeles Lakers", "0022500001", "2025-10-21", "LAL vs. GSW", "W", 36, 10, 20, 0.5, 3, 0, 0.0, 5, 5, 0.8, 0, 7, 7, 6, 2, 1, 4, 2, 28, 0, 0.0, 1],
+        ["22025", 1002, "Ben Home", 1610612747, "LAL", "Los Angeles Lakers", "0022500001", "2025-10-21", "LAL vs. GSW", "W", 33, 5, 11, 0.5, 0, 0, 0.0, 2, 4, 0.8, 0, 9, 9, 2, 0, 2, 1, 2, 12, 0, 0.0, 1],
+        ["22025", 2001, "Dan Away", 1610612744, "GSW", "Golden State Warriors", "0022500001", "2025-10-21", "GSW @ LAL", "W", 38, 11, 24, 0.5, 5, 0, 0.0, 4, 6, 0.8, 0, 4, 4, 8, 1, 0, 3, 2, 31, 0, 0.0, 1],
+        ["22025", 2003, "Finn Away", 1610612744, "GSW", "Golden State Warriors", "0022500001", "2025-10-21", "GSW @ LAL", "W", 0, 0, 0, 0.5, 0, 0, 0.0, 0, 0, 0.8, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0.0, 1],
+        ["22025", 3001, "Gus Overtime", 1610612738, "BOS", "Boston Celtics", "0022500010", "2025-10-22", "BOS vs. NYK", "W", 44, 12, 26, 0.5, 4, 0, 0.0, 7, 8, 0.8, 0, 10, 10, 5, 1, 1, 5, 2, 35, 0, 0.0, 1],
+        ["22025", 4001, "Hal Overtime", 1610612752, "NYK", "New York Knicks", "0022500010", "2025-10-22", "NYK @ BOS", "W", 46, 11, 25, 0.5, 3, 0, 0.0, 5, 6, 0.8, 0, 6, 6, 9, 2, 0, 4, 2, 30, 0, 0.0, 1]
+      ]
+    }
+  ]
+}

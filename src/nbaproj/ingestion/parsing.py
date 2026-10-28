@@ -26,6 +26,16 @@ def game_type_from_id(game_id: str) -> str:
         raise ValueError(f"Unknown game type prefix in game id {game_id!r}") from None
 
 
+def fantasy_game_type(game_id: str) -> str | None:
+    """The game type if the game counts for fantasy, else None.
+
+    Regular season, play-in and playoff games count. Preseason (001), All-Star (003),
+    the Cup final (006) and any unknown prefix do not.
+    """
+    game_type = _GAME_TYPES.get(game_id[:3])
+    return None if game_type in (None, "preseason") else game_type
+
+
 def parse_minutes(raw: str) -> float:
     """Convert an ISO duration such as ``PT33M15.00S`` to decimal minutes."""
     match = _ISO_MINUTES.match(raw)
@@ -55,7 +65,8 @@ class ScoreboardGame:
     away: TeamInfo
 
 
-def _parse_team(raw: dict) -> TeamInfo:
+def parse_team(raw: dict) -> TeamInfo:
+    """Read a team from a payload's teamId, teamTricode, teamName and teamCity."""
     return TeamInfo(
         team_id=int(raw["teamId"]),
         tricode=raw["teamTricode"],
@@ -64,14 +75,16 @@ def _parse_team(raw: dict) -> TeamInfo:
     )
 
 
-def _status_name(raw_game: dict) -> str:
+def status_name(raw_game: dict) -> str:
+    """Name a payload game's status: scheduled, live or final."""
     status_code = raw_game["gameStatus"]
     if status_code not in _STATUSES:
         raise ValueError(f"Unknown game status {status_code!r} for {raw_game['gameId']}")
     return _STATUSES[status_code]
 
 
-def _parse_utc(raw: str) -> datetime:
+def parse_utc(raw: str) -> datetime:
+    """Read an ISO timestamp ending in Z as an aware UTC datetime."""
     return datetime.fromisoformat(raw.replace("Z", "+00:00"))
 
 
@@ -82,10 +95,10 @@ def parse_scoreboard(payload: dict) -> list[ScoreboardGame]:
         games.append(
             ScoreboardGame(
                 game_id=raw["gameId"],
-                status=_status_name(raw),
-                tip_off_utc=_parse_utc(raw["gameTimeUTC"]),
-                home=_parse_team(raw["homeTeam"]),
-                away=_parse_team(raw["awayTeam"]),
+                status=status_name(raw),
+                tip_off_utc=parse_utc(raw["gameTimeUTC"]),
+                home=parse_team(raw["homeTeam"]),
+                away=parse_team(raw["awayTeam"]),
             )
         )
     return games
@@ -175,9 +188,9 @@ def parse_boxscore(payload: dict) -> BoxScore:
     game = payload["game"]
     return BoxScore(
         game_id=game["gameId"],
-        status=_status_name(game),
-        tip_off_utc=_parse_utc(game["gameTimeUTC"]),
-        home=_parse_team(game["homeTeam"]),
-        away=_parse_team(game["awayTeam"]),
+        status=status_name(game),
+        tip_off_utc=parse_utc(game["gameTimeUTC"]),
+        home=parse_team(game["homeTeam"]),
+        away=parse_team(game["awayTeam"]),
         lines=_parse_team_lines(game["homeTeam"]) + _parse_team_lines(game["awayTeam"]),
     )

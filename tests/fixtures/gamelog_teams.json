@@ -1,0 +1,16 @@
+{
+  "resource": "leaguegamelog",
+  "parameters": {"Season": "2025-26", "SeasonType": "Regular Season"},
+  "resultSets": [
+    {
+      "name": "LeagueGameLog",
+      "headers": ["SEASON_ID", "TEAM_ID", "TEAM_ABBREVIATION", "TEAM_NAME", "GAME_ID", "GAME_DATE", "MATCHUP", "WL", "MIN", "FGM", "FGA", "FG_PCT", "FG3M", "FG3A", "FG3_PCT", "FTM", "FTA", "FT_PCT", "OREB", "DREB", "REB", "AST", "STL", "BLK", "TOV", "PF", "PTS", "PLUS_MINUS", "VIDEO_AVAILABLE"],
+      "rowSet": [
+        ["22025", 1610612747, "LAL", "Los Angeles Lakers", "0022500001", "2025-10-21", "LAL vs. GSW", "W", 240, 0, 90, 0.45, 0, 0, 0.0, 0, 25, 0.8, 0, 0, 0, 0, 0, 0, 12, 0, 0, 0, 1],
+        ["22025", 1610612744, "GSW", "Golden State Warriors", "0022500001", "2025-10-21", "GSW @ LAL", "W", 240, 0, 88, 0.45, 0, 0, 0.0, 0, 20, 0.8, 0, 0, 0, 0, 0, 0, 14, 0, 0, 0, 1],
+        ["22025", 1610612738, "BOS", "Boston Celtics", "0022500010", "2025-10-22", "BOS vs. NYK", "W", 265, 0, 95, 0.45, 0, 0, 0.0, 0, 28, 0.8, 0, 0, 0, 0, 0, 0, 13, 0, 0, 0, 1],
+        ["22025", 1610612752, "NYK", "New York Knicks", "0022500010", "2025-10-22", "NYK @ BOS", "W", 265, 0, 93, 0.45, 0, 0, 0.0, 0, 24, 0.8, 0, 0, 0, 0, 0, 0, 11, 0, 0, 0, 1]
+      ]
+    }
+  ]
+}

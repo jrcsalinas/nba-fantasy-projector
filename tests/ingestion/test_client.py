@@ -3,7 +3,12 @@
 import pytest
 import requests
 
-from nbaproj.ingestion.client import LiveNbaClient, NbaClientError
+from nbaproj.ingestion.client import (
+    LiveNbaClient,
+    NbaClientError,
+    RetryPolicy,
+    StatsNbaClient,
+)
 
 
 class FlakyFetch:
@@ -26,7 +31,7 @@ def _client(fetch, sleeps: list[float]) -> LiveNbaClient:
     return LiveNbaClient(
         fetch_scoreboard=fetch,
         fetch_boxscore=fetch,
-        sleep=sleeps.append,
+        retry=RetryPolicy(sleep=sleeps.append),
     )
 
 
@@ -81,9 +86,54 @@ def test_client_does_not_retry_unexpected_errors():
 def test_client_with_zero_attempts_fails_clearly():
     """Misconfiguring zero attempts raises instead of returning nothing."""
     fetch = FlakyFetch(0, requests.ConnectionError("boom"), {"ok": True})
-    client = LiveNbaClient(fetch_scoreboard=fetch, attempts=0)
+    client = LiveNbaClient(fetch_scoreboard=fetch, retry=RetryPolicy(attempts=0))
 
     with pytest.raises(NbaClientError, match="no attempts"):
         client.get_scoreboard()
 
     assert fetch.calls == 0
+
+
+def test_stats_client_returns_schedule_and_game_logs():
+    """Each stats call passes the season to its own fetch function."""
+    seen = []
+
+    def fetcher(name):
+        def fetch(season):
+            seen.append((name, season))
+            return {"name": name}
+
+        return fetch
+
+    client = StatsNbaClient(
+        fetch_schedule=fetcher("schedule"),
+        fetch_player_log=fetcher("players"),
+        fetch_team_log=fetcher("teams"),
+    )
+
+    assert client.get_schedule("2025-26") == {"name": "schedule"}
+    assert client.get_player_game_log("2025-26") == {"name": "players"}
+    assert client.get_team_game_log("2024-25") == {"name": "teams"}
+    assert seen == [
+        ("schedule", "2025-26"),
+        ("players", "2025-26"),
+        ("teams", "2024-25"),
+    ]
+
+
+def test_stats_client_retries_and_raises_like_the_live_client():
+    """Transient errors are retried with backoff, then a clear error is raised."""
+    sleeps: list[float] = []
+    flaky = FlakyFetch(2, requests.Timeout("slow"), {"ok": True})
+    client = StatsNbaClient(fetch_schedule=flaky, retry=RetryPolicy(sleep=sleeps.append))
+
+    assert client.get_schedule("2025-26") == {"ok": True}
+    assert sleeps == [1.0, 2.0]
+
+    sleeps.clear()
+    down = FlakyFetch(99, requests.ConnectionError("down"), {})
+    client = StatsNbaClient(fetch_player_log=down, retry=RetryPolicy(sleep=sleeps.append))
+    with pytest.raises(NbaClientError, match="3 attempts"):
+        client.get_player_game_log("2025-26")
+    assert down.calls == 3
+    assert sleeps == [1.0, 2.0]

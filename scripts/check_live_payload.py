@@ -10,6 +10,7 @@ Run from the project root:  .venv/Scripts/python.exe scripts/check_live_payload.
 import sys
 
 from nbaproj.ingestion.client import LiveNbaClient, NbaClientError
+from nbaproj.ingestion.contract import missing_fields, report
 from nbaproj.ingestion.parsing import parse_boxscore, parse_scoreboard
 
 TEAM_FIELDS = ["teamId", "teamName", "teamCity", "teamTricode"]
@@ -24,30 +25,26 @@ TEAM_STATS = ["minutes", "fieldGoalsAttempted", "freeThrowsAttempted", "turnover
 STATUS_PREFERENCE = (3, 2)  # final, then live; a scheduled game has no box score yet
 
 
-def _missing(container: dict, fields: list[str], where: str) -> list[str]:
-    return [f"{where}.{field}" for field in fields if field not in container]
-
-
 def check_scoreboard_game(game: dict) -> list[str]:
     """Missing fields in one scoreboard game."""
-    problems = _missing(game, GAME_FIELDS, "game")
+    problems = missing_fields(game, GAME_FIELDS, "game")
     for side in ("homeTeam", "awayTeam"):
-        problems += _missing(game.get(side, {}), TEAM_FIELDS, f"game.{side}")
+        problems += missing_fields(game.get(side, {}), TEAM_FIELDS, f"game.{side}")
     return problems
 
 
 def check_boxscore_game(game: dict) -> list[str]:
     """Missing fields in a box score game."""
-    problems = _missing(game, GAME_FIELDS, "game")
+    problems = missing_fields(game, GAME_FIELDS, "game")
     for side in ("homeTeam", "awayTeam"):
         team = game.get(side, {})
         where = f"game.{side}"
-        problems += _missing(team, TEAM_FIELDS + ["players", "statistics"], where)
-        problems += _missing(team.get("statistics", {}), TEAM_STATS, f"{where}.statistics")
+        problems += missing_fields(team, TEAM_FIELDS + ["players", "statistics"], where)
+        problems += missing_fields(team.get("statistics", {}), TEAM_STATS, f"{where}.statistics")
         played = [p for p in team.get("players", []) if p.get("played") == "1"]
         for player in played[:1]:
-            problems += _missing(player, PLAYER_FIELDS, f"{where}.players[]")
-            problems += _missing(
+            problems += missing_fields(player, PLAYER_FIELDS, f"{where}.players[]")
+            problems += missing_fields(
                 player.get("statistics", {}), PLAYER_STATS, f"{where}.players[].statistics"
             )
     return problems
@@ -94,10 +91,7 @@ def main() -> int:
             parse_boxscore(box)
             print(f"boxscore {game_id}: parser accepted the payload")
 
-    for problem in problems:
-        print(f"  MISSING {problem}")
-    print("RESULT:", "OK" if not problems else "FIELDS MISSING")
-    return 1 if problems else 0
+    return report(problems)
 
 
 if __name__ == "__main__":
