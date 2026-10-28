@@ -5,18 +5,18 @@ from datetime import date, datetime, timezone
 import pytest
 from sqlalchemy import func, select
 
-from nbaproj.db.models import Game, RefreshLog, Team
+from nbaproj.db.models import Game, JobLock, RefreshLog, Team
 from nbaproj.ingestion.client import NbaClientError
 from nbaproj.ingestion.parsing import TeamInfo
 from nbaproj.ingestion.schedule import (
+    last_completed_season,
     parse_schedule,
     previous_season,
-    refresh_schedule,
     run_schedule_refresh,
     season_for_date,
     store_schedule,
 )
-from tests.ingestion.fakes import FakeStatsClient
+from tests.ingestion.fakes import FakeStatsClient, LockStealingStatsClient
 
 
 def _count(session, model) -> int:
@@ -92,14 +92,16 @@ def test_store_schedule_never_downgrades_a_final_game(session, schedule_payload)
     assert session.get(Game, "0022500001").status == "final"
 
 
-def test_refresh_schedule_fetches_parses_and_stores(session, schedule_payload):
-    """refresh_schedule asks the client for the season and commits the games."""
+def test_run_schedule_refresh_fetches_the_season_and_commits_the_games(
+    session, schedule_payload
+):
+    """The run asks the client for the season and the games survive a rollback."""
     client = FakeStatsClient(schedule=schedule_payload)
 
-    written = refresh_schedule(session, client, "2025-26")
+    result = run_schedule_refresh(session, client, "2025-26", trigger="cli")
     session.rollback()
 
-    assert written == 4
+    assert result.rows_upserted == 4
     assert client.requests == [("schedule", "2025-26")]
     assert _count(session, Game) == 4
 
@@ -107,15 +109,30 @@ def test_refresh_schedule_fetches_parses_and_stores(session, schedule_payload):
 @pytest.mark.parametrize(
     ("day", "expected"),
     [
+        (date(2026, 6, 30), "2025-26"),
+        (date(2026, 7, 1), "2026-27"),
+        (date(2026, 8, 15), "2026-27"),
         (date(2026, 10, 28), "2026-27"),
-        (date(2026, 10, 1), "2026-27"),
         (date(2027, 4, 1), "2026-27"),
-        (date(2026, 9, 30), "2025-26"),
     ],
 )
-def test_season_for_date_starts_a_season_in_october(day, expected):
-    """From October a new season label begins; before that it is the previous one."""
+def test_season_for_date_rolls_over_on_the_first_of_july(day, expected):
+    """From 1 July the label is the upcoming season, whose schedule is published then."""
     assert season_for_date(day) == expected
+
+
+@pytest.mark.parametrize(
+    ("day", "expected"),
+    [
+        (date(2026, 6, 30), "2024-25"),  # before 1 July the season still counts as running
+        (date(2026, 8, 15), "2025-26"),  # the offseason: the season just played
+        (date(2026, 10, 28), "2025-26"),
+        (date(2027, 2, 1), "2025-26"),
+    ],
+)
+def test_last_completed_season_on_every_date(day, expected):
+    """The default backfill is the last season that is certainly over."""
+    assert last_completed_season(day) == expected
 
 
 def test_previous_season_steps_back_one_year():
@@ -145,3 +162,37 @@ def test_run_schedule_refresh_reports_failed_and_stores_nothing(session):
     assert "blocked" in result.message
     assert _count(session, Game) == 0
     assert session.scalars(select(RefreshLog.status)).one() == "failed"
+
+
+def test_parse_schedule_reports_a_null_team_id_as_value_error(schedule_payload):
+    """A null team id is a ValueError, not a TypeError."""
+    _game(schedule_payload, "0022500001")["homeTeam"]["teamId"] = None
+
+    with pytest.raises(ValueError, match="malformed schedule"):
+        parse_schedule(schedule_payload)
+
+
+def test_schedule_refresh_stops_when_the_lock_is_lost_before_writing(
+    session, schedule_payload
+):
+    """If another writer took the lock during the fetch, no schedule is written."""
+    client = LockStealingStatsClient(session, schedule=schedule_payload)
+
+    result = run_schedule_refresh(session, client, "2025-26", trigger="cli")
+
+    assert result.status == "failed"
+    assert "lost the lock" in result.message
+    assert _count(session, Game) == 0
+    assert session.get(JobLock, "refresh").holder == "thief"
+
+
+def test_schedule_refresh_with_zero_games_fails(session, schedule_payload):
+    """A schedule with no games that count is a wrong season or an empty response."""
+    schedule_payload["leagueSchedule"]["gameDates"] = []
+    client = FakeStatsClient(schedule=schedule_payload)
+
+    result = run_schedule_refresh(session, client, "2025-26", trigger="cli")
+
+    assert result.status == "failed"
+    assert "no games" in result.message
+    assert _count(session, Game) == 0

@@ -4,7 +4,6 @@ Backfilled minutes are whole numbers (the live feed has decimals), so usage deri
 here is slightly coarser than usage derived from live box scores.
 """
 
-import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -15,12 +14,16 @@ from sqlalchemy.orm import Session
 from nbaproj.db.models import Game, GameLog, Player
 from nbaproj.ingestion.client import StatsClient
 from nbaproj.ingestion.loader import SOURCE_LIVE, chunked, game_log_row
-from nbaproj.ingestion.parsing import PlayerLine
-from nbaproj.ingestion.runs import EXPECTED_ERRORS, Job, RunResult, utc_now
+from nbaproj.ingestion.parsing import (
+    PLAYER_NAME_LENGTH,
+    PlayerLine,
+    limited_text,
+    malformed_as_payload_error,
+    parse_game_id,
+)
+from nbaproj.ingestion.runs import Job, Lease, RunResult, guarded, utc_now
 from nbaproj.ingestion.schedule import parse_schedule, store_schedule
 from nbaproj.ingestion.usage import Totals, usage_pct
-
-logger = logging.getLogger(__name__)
 
 SOURCE_BACKFILL = "backfill"
 BACKFILL_LOCK_TTL = timedelta(minutes=30)
@@ -28,9 +31,10 @@ BACKFILL_LOCK_TTL = timedelta(minutes=30)
 
 def parse_result_set_rows(payload: dict) -> list[dict]:
     """Turn the first result set of a stats payload into one dict per row."""
-    result = payload["resultSets"][0]
-    headers = result["headers"]
-    return [dict(zip(headers, row, strict=True)) for row in result["rowSet"]]
+    with malformed_as_payload_error("game log payload"):
+        result = payload["resultSets"][0]
+        headers = result["headers"]
+        return [dict(zip(headers, row, strict=True)) for row in result["rowSet"]]
 
 
 def _totals(row: dict) -> Totals:
@@ -43,17 +47,19 @@ def _totals(row: dict) -> Totals:
 
 
 def _team_totals(team_payload: dict) -> dict[tuple[str, int], Totals]:
-    return {
-        (row["GAME_ID"], int(row["TEAM_ID"])): _totals(row)
-        for row in parse_result_set_rows(team_payload)
-    }
+    totals = {}
+    for row in parse_result_set_rows(team_payload):
+        where = f"team game log row (game {row.get('GAME_ID')}, team {row.get('TEAM_ID')})"
+        with malformed_as_payload_error(where):
+            totals[(row["GAME_ID"], int(row["TEAM_ID"]))] = _totals(row)
+    return totals
 
 
 def _line(row: dict, team: Totals | None) -> PlayerLine:
     player = _totals(row)
     return PlayerLine(
         player_id=int(row["PLAYER_ID"]),
-        name=row["PLAYER_NAME"],
+        name=limited_text(row["PLAYER_NAME"], PLAYER_NAME_LENGTH, "player name"),
         team_id=int(row["TEAM_ID"]),
         minutes=player.minutes,
         pts=int(row["PTS"]),
@@ -79,11 +85,15 @@ def build_backfill_lines(
     A line whose team row is missing keeps no usage rather than guessing.
     """
     teams = _team_totals(team_payload)
-    by_game: dict[str, list[PlayerLine]] = {}
+    by_game: dict[str, dict[int, PlayerLine]] = {}
     for row in parse_result_set_rows(player_payload):
-        team = teams.get((row["GAME_ID"], int(row["TEAM_ID"])))
-        by_game.setdefault(row["GAME_ID"], []).append(_line(row, team))
-    return by_game
+        where = f"game log row (game {row.get('GAME_ID')}, player {row.get('PLAYER_ID')})"
+        with malformed_as_payload_error(where):
+            game_id = parse_game_id(row["GAME_ID"])
+            team = teams.get((game_id, int(row["TEAM_ID"])))
+            line = _line(row, team)
+            by_game.setdefault(game_id, {})[line.player_id] = line  # last duplicate wins
+    return {game_id: list(lines.values()) for game_id, lines in by_game.items()}
 
 
 @dataclass(frozen=True)
@@ -176,19 +186,40 @@ class BackfillResult(RunResult):
 BACKFILL_JOB = Job("backfill", BackfillResult, ttl=BACKFILL_LOCK_TTL)
 
 
-def _run_season(session: Session, client: StatsClient, season: str) -> BackfillResult:
-    """Store the schedule and the lines in one transaction; roll back on failure."""
-    try:
-        games = store_schedule(session, parse_schedule(client.get_schedule(season)))
+def _run_season(
+    session: Session, client: StatsClient, season: str, lease: Lease
+) -> BackfillResult:
+    """Fetch and parse everything, then store it in one short transaction.
+
+    Nothing is written until every payload is in hand, so no write transaction is held
+    open (blocking other writers) during the slow network calls. A failure while writing
+    rolls the whole season back.
+    """
+    games, stored = 0, BackfillStored()
+    with guarded(session, season) as guard:
+        schedule = parse_schedule(client.get_schedule(season))
         lines = build_backfill_lines(
             client.get_player_game_log(season), client.get_team_game_log(season)
         )
+        if not schedule:
+            return BackfillResult(
+                status="failed",
+                message=f"{season}: the schedule is empty (wrong season or an empty response)",
+            )
+        if not lines:
+            return BackfillResult(
+                status="skipped", message=f"{season}: no player lines yet, so nothing to backfill"
+            )
+        if not lease.renew():
+            return BackfillResult(
+                status="failed",
+                message=f"{season}: lost the lock to another writer; nothing was written",
+            )
+        games = store_schedule(session, schedule)
         stored = store_backfill(session, lines)
         session.commit()
-    except EXPECTED_ERRORS as error:
-        session.rollback()
-        logger.exception("Backfill of %s failed", season)
-        return BackfillResult(status="failed", message=f"{season}: {error}")
+    if guard.error:
+        return BackfillResult(status="failed", message=guard.error)
     return BackfillResult(
         status="succeeded",
         rows_upserted=games + stored.lines_stored,
@@ -217,5 +248,5 @@ def backfill_season(
     one transaction, so a failure leaves nothing half-loaded.
     """
     return BACKFILL_JOB.run(
-        session, trigger, clock, lambda: _run_season(session, client, season)
+        session, trigger, clock, lambda lease: _run_season(session, client, season, lease)
     )

@@ -1,9 +1,13 @@
 """Engine and session setup."""
 
 from sqlalchemy import Engine, create_engine, event
+from sqlalchemy.engine.interfaces import DBAPIConnection
+from sqlalchemy.pool import ConnectionPoolEntry
 
 
-def _enable_sqlite_foreign_keys(dbapi_connection, _connection_record):
+def _enable_sqlite_foreign_keys(
+    dbapi_connection: DBAPIConnection, _connection_record: ConnectionPoolEntry
+) -> None:
     cursor = dbapi_connection.cursor()
     cursor.execute("PRAGMA foreign_keys=ON")
     cursor.close()
@@ -27,7 +31,7 @@ def create_db_engine(database_url: str) -> Engine:
     SQLite does not enforce foreign keys unless asked, so they are switched on
     for every SQLite connection.
     """
-    engine = create_engine(normalize_database_url(database_url))
+    engine = create_engine(normalize_database_url(database_url), pool_pre_ping=True)
     if engine.dialect.name == "sqlite":
         event.listen(engine, "connect", _enable_sqlite_foreign_keys)
     return engine

@@ -5,12 +5,14 @@ from datetime import datetime, timezone
 import pytest
 
 from nbaproj.ingestion.parsing import (
+    PayloadError,
     TeamInfo,
     fantasy_game_type,
     game_type_from_id,
     parse_boxscore,
     parse_minutes,
     parse_scoreboard,
+    parse_utc,
 )
 
 
@@ -144,3 +146,123 @@ def test_parse_boxscore_handles_overtime_minutes(overtime_payload):
 def test_fantasy_game_type_keeps_only_countable_prefixes(game_id, expected):
     """Regular season, playoffs and play-in count; everything else is None."""
     assert fantasy_game_type(game_id) == expected
+
+
+def test_parse_boxscore_reports_a_null_field_as_value_error(boxscore_payload):
+    """A null where a value is read becomes a ValueError that says what was malformed."""
+    boxscore_payload["game"]["homeTeam"]["players"][0]["statistics"]["minutes"] = None
+
+    with pytest.raises(ValueError, match="malformed box score"):
+        parse_boxscore(boxscore_payload)
+
+
+def test_parse_scoreboard_reports_a_missing_team_as_value_error(scoreboard_payload):
+    """A game without a team object is a ValueError, not a TypeError."""
+    scoreboard_payload["scoreboard"]["games"][0]["homeTeam"] = None
+
+    with pytest.raises(ValueError, match="malformed scoreboard"):
+        parse_scoreboard(scoreboard_payload)
+
+
+@pytest.mark.parametrize("played", [1, True, "1"])
+def test_parse_boxscore_accepts_played_as_int_or_bool(boxscore_payload, played):
+    """The "played" flag counts however it is typed, so a format change cannot drop everyone."""
+    for side in ("homeTeam", "awayTeam"):
+        for player in boxscore_payload["game"][side]["players"]:
+            if player["played"] == "1":
+                player["played"] = played
+
+    box = parse_boxscore(boxscore_payload)
+
+    assert [line.player_id for line in box.lines] == [1001, 1002, 2001, 2002, 2003]
+
+
+def test_parse_boxscore_of_none_raises_payload_error():
+    """A payload that is not even a dict is a data problem like any other."""
+    with pytest.raises(PayloadError):
+        parse_boxscore(None)
+
+
+def test_parse_boxscore_with_a_missing_key_raises_payload_error(boxscore_payload):
+    """A missing key is reported as a payload error that says what was malformed."""
+    del boxscore_payload["game"]["gameId"]
+
+    with pytest.raises(PayloadError, match="malformed box score"):
+        parse_boxscore(boxscore_payload)
+
+
+def test_every_parse_problem_is_a_payload_error(scoreboard_payload):
+    """Bad minutes, an unknown game type, and an unknown status are all payload errors."""
+    scoreboard_payload["scoreboard"]["games"][0]["gameStatus"] = 9
+
+    with pytest.raises(PayloadError):
+        parse_minutes("abc")
+    with pytest.raises(PayloadError):
+        game_type_from_id("0032500001")
+    with pytest.raises(PayloadError):
+        parse_scoreboard(scoreboard_payload)
+
+
+def test_parse_utc_rejects_a_timestamp_without_a_timezone():
+    """A timestamp must say it is UTC (Z or +00:00); a naive one would be stored wrongly."""
+    expected = datetime(2025, 10, 22, 23, 30, tzinfo=timezone.utc)
+
+    assert parse_utc("2025-10-22T23:30:00Z") == expected
+    assert parse_utc("2025-10-22T23:30:00+00:00") == expected
+    with pytest.raises(PayloadError, match="timezone"):
+        parse_utc("2025-10-22T23:30:00")
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("teamTricode", "ABCD"), ("teamName", "x" * 65), ("teamCity", "x" * 65)],
+)
+def test_parse_scoreboard_rejects_team_values_longer_than_the_columns(
+    scoreboard_payload, field, value
+):
+    """Postgres refuses over-long values (SQLite does not), so the parser rejects them."""
+    scoreboard_payload["scoreboard"]["games"][0]["homeTeam"][field] = value
+
+    with pytest.raises(PayloadError, match="too long"):
+        parse_scoreboard(scoreboard_payload)
+
+
+def test_parse_boxscore_rejects_a_player_name_longer_than_the_column(boxscore_payload):
+    """An over-long player name is rejected before it can fail a whole transaction."""
+    boxscore_payload["game"]["homeTeam"]["players"][0]["name"] = "x" * 129
+
+    with pytest.raises(PayloadError, match="too long"):
+        parse_boxscore(boxscore_payload)
+
+
+@pytest.mark.parametrize("bad_id", ["abcdefghij", "00225000011", "002250000", ""])
+def test_a_malformed_game_id_is_a_payload_error(scoreboard_payload, bad_id):
+    """A game id must be exactly ten digits."""
+    scoreboard_payload["scoreboard"]["games"][0]["gameId"] = bad_id
+
+    with pytest.raises(PayloadError, match="game id"):
+        parse_scoreboard(scoreboard_payload)
+
+
+def test_parse_scoreboard_skips_a_malformed_non_fantasy_game(scoreboard_payload):
+    """A broken preseason game must not take the real games down with it."""
+    games = scoreboard_payload["scoreboard"]["games"]
+    assert games[2]["gameId"] == "0012500003"
+    games[2]["homeTeam"]["teamTricode"] = "TOOLONGTRICODE"
+
+    parsed = parse_scoreboard(scoreboard_payload)
+
+    assert [g.game_id for g in parsed] == [
+        "0022500001",
+        "0022500002",
+        "0042500101",
+        "0022500004",
+    ]
+
+
+def test_parse_scoreboard_still_rejects_a_malformed_fantasy_game(scoreboard_payload):
+    """A game that would be loaded must be valid; its problem is not hidden."""
+    scoreboard_payload["scoreboard"]["games"][0]["homeTeam"]["teamTricode"] = "TOOLONG"
+
+    with pytest.raises(PayloadError, match="too long"):
+        parse_scoreboard(scoreboard_payload)

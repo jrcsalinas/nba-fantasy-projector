@@ -3,6 +3,7 @@
 import pytest
 from sqlalchemy.exc import IntegrityError
 
+from nbaproj.db import session as session_module
 from nbaproj.db.models import GameLog, Player, Team
 from nbaproj.db.session import create_db_engine, normalize_database_url
 
@@ -44,3 +45,19 @@ def test_engine_rejects_game_log_row_with_unknown_game(session):
 
     with pytest.raises(IntegrityError):
         session.commit()
+
+
+def test_engine_is_created_with_pool_pre_ping(monkeypatch):
+    """Hosted Postgres closes idle connections, so each checkout must test its connection."""
+    seen = {}
+    real_create_engine = session_module.create_engine
+
+    def capture(url, **kwargs):
+        seen.update(kwargs)
+        return real_create_engine(url, **kwargs)
+
+    monkeypatch.setattr(session_module, "create_engine", capture)
+
+    create_db_engine("sqlite://").dispose()
+
+    assert seen.get("pool_pre_ping") is True

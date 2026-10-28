@@ -1,6 +1,5 @@
 """The season schedule from the NBA stats host, cached in the ``game`` table."""
 
-import logging
 from collections.abc import Callable
 from datetime import date, datetime
 
@@ -11,13 +10,13 @@ from nbaproj.ingestion.loader import upsert_games
 from nbaproj.ingestion.parsing import (
     ScoreboardGame,
     fantasy_game_type,
+    malformed_as_payload_error,
+    parse_game_id,
     parse_team,
     parse_utc,
     status_name,
 )
-from nbaproj.ingestion.runs import EXPECTED_ERRORS, Job, RunResult, utc_now
-
-logger = logging.getLogger(__name__)
+from nbaproj.ingestion.runs import Job, Lease, RunResult, guarded, utc_now
 
 SCHEDULE_JOB = Job("schedule", RunResult)
 
@@ -34,19 +33,21 @@ def parse_schedule(payload: dict) -> list[ScoreboardGame]:
     teams are not both real NBA teams.
     """
     games = []
-    for day in payload["leagueSchedule"]["gameDates"]:
-        for raw in day["games"]:
-            if fantasy_game_type(raw["gameId"]) is None or not _has_real_teams(raw):
-                continue
-            games.append(
-                ScoreboardGame(
-                    game_id=raw["gameId"],
-                    status=status_name(raw),
-                    tip_off_utc=parse_utc(raw["gameDateTimeUTC"]),
-                    home=parse_team(raw["homeTeam"]),
-                    away=parse_team(raw["awayTeam"]),
+    with malformed_as_payload_error("schedule"):
+        for day in payload["leagueSchedule"]["gameDates"]:
+            for raw in day["games"]:
+                game_id = parse_game_id(raw["gameId"])
+                if fantasy_game_type(game_id) is None or not _has_real_teams(raw):
+                    continue
+                games.append(
+                    ScoreboardGame(
+                        game_id=game_id,
+                        status=status_name(raw),
+                        tip_off_utc=parse_utc(raw["gameDateTimeUTC"]),
+                        home=parse_team(raw["homeTeam"]),
+                        away=parse_team(raw["awayTeam"]),
+                    )
                 )
-            )
     return games
 
 
@@ -59,16 +60,12 @@ def store_schedule(session: Session, games: list[ScoreboardGame]) -> int:
     return upsert_games(session, games)
 
 
-def refresh_schedule(session: Session, client: StatsClient, season: str) -> int:
-    """Fetch a season's schedule, store it, and commit. Returns the number of games."""
-    written = store_schedule(session, parse_schedule(client.get_schedule(season)))
-    session.commit()
-    return written
-
-
 def season_for_date(day: date) -> str:
-    """The season label for a date: a new season starts in October (``2026-27``)."""
-    start_year = day.year if day.month >= 10 else day.year - 1
+    """The season label for a date. A season starts on 1 July: ``2026-27`` from then on.
+
+    From July the upcoming season's schedule is published, so that is the season to cache.
+    """
+    start_year = day.year if day.month >= 7 else day.year - 1
     return f"{start_year}-{(start_year + 1) % 100:02d}"
 
 
@@ -78,13 +75,26 @@ def previous_season(season: str) -> str:
     return f"{start_year}-{(start_year + 1) % 100:02d}"
 
 
-def _run_schedule_refresh(session: Session, client: StatsClient, season: str) -> RunResult:
-    try:
-        written = refresh_schedule(session, client, season)
-    except EXPECTED_ERRORS as error:
-        session.rollback()
-        logger.exception("Schedule refresh for %s failed", season)
-        return RunResult(status="failed", message=f"{season}: {error}")
+def _run_schedule_refresh(
+    session: Session, client: StatsClient, season: str, lease: Lease
+) -> RunResult:
+    written = 0
+    with guarded(session, season) as guard:
+        games = parse_schedule(client.get_schedule(season))
+        if not games:
+            return RunResult(
+                status="failed",
+                message=f"{season}: no games in the schedule (wrong season or an empty response)",
+            )
+        if not lease.renew():
+            return RunResult(
+                status="failed",
+                message=f"{season}: lost the lock to another writer; nothing was written",
+            )
+        written = store_schedule(session, games)
+        session.commit()
+    if guard.error:
+        return RunResult(status="failed", message=guard.error)
     return RunResult(
         status="succeeded", rows_upserted=written, message=f"{season}: {written} games"
     )
@@ -99,5 +109,14 @@ def run_schedule_refresh(
 ) -> RunResult:
     """Refresh a season's schedule under the shared lock and record it in the log."""
     return SCHEDULE_JOB.run(
-        session, trigger, clock, lambda: _run_schedule_refresh(session, client, season)
+        session, trigger, clock, lambda lease: _run_schedule_refresh(session, client, season, lease)
     )
+
+
+def last_completed_season(day: date) -> str:
+    """The latest season that is certainly over: the one before ``season_for_date``.
+
+    Before 1 July the current season is treated as still running, even in the last days
+    after the finals, so the default errs on the safe (earlier) side.
+    """
+    return previous_season(season_for_date(day))

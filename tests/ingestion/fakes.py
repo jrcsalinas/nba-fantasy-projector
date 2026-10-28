@@ -1,6 +1,13 @@
 """Test doubles and payload helpers for ingestion tests."""
 
 import json
+from datetime import datetime, timezone
+
+from sqlalchemy import update
+
+from nbaproj.db.models import JobLock
+from nbaproj.ingestion.backfill import build_backfill_lines, store_backfill
+from nbaproj.ingestion.schedule import parse_schedule, store_schedule
 
 
 class FakeClient:
@@ -78,3 +85,27 @@ class FakeStatsClient:
     def get_team_game_log(self, season: str) -> dict:
         """Return the canned team game log."""
         return self._serve("teams", season, self.team_log)
+
+
+def backfill_games(session, schedule: dict, player_log: dict, team_log: dict) -> None:
+    """Store the schedule and the backfilled lines, as a season backfill would."""
+    store_schedule(session, parse_schedule(schedule))
+    store_backfill(session, build_backfill_lines(player_log, team_log))
+    session.commit()
+
+
+class LockStealingStatsClient(FakeStatsClient):
+    """A stats client that lets another writer take the refresh lock during every fetch."""
+
+    def __init__(self, session, schedule=None, player_log=None, team_log=None):
+        super().__init__(schedule, player_log, team_log)
+        self.session = session
+
+    def _serve(self, name: str, season: str, payload):
+        self.session.execute(
+            update(JobLock).values(
+                holder="thief", expires_at=datetime(2100, 1, 1, tzinfo=timezone.utc)
+            )
+        )
+        self.session.commit()
+        return super()._serve(name, season, payload)

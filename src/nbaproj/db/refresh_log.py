@@ -1,8 +1,9 @@
 """Recording of refresh runs."""
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from nbaproj.db.models import RefreshLog
@@ -10,6 +11,7 @@ from nbaproj.db.models import RefreshLog
 STATUS_RUNNING = "running"
 FINAL_STATUSES = frozenset({"succeeded", "failed", "skipped", "rejected"})
 TRIGGERS = frozenset({"cron", "ui", "cli"})
+ABANDONED_MESSAGE = "abandoned: the process stopped before this run finished"
 
 
 @dataclass(frozen=True)
@@ -47,3 +49,18 @@ def finish_refresh(
     log.finished_at = now
     session.commit()
     return log
+
+
+def reap_abandoned(session: Session, now: datetime, older_than: timedelta) -> int:
+    """Mark ``running`` rows older than ``older_than`` as failed. Returns how many.
+
+    A run that never finished (killed process, lost connection) would otherwise stay
+    ``running`` forever.
+    """
+    reaped = session.execute(
+        update(RefreshLog)
+        .where(RefreshLog.status == STATUS_RUNNING, RefreshLog.started_at < now - older_than)
+        .values(status="failed", finished_at=now, message=ABANDONED_MESSAGE)
+    )
+    session.commit()
+    return reaped.rowcount

@@ -5,7 +5,12 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from nbaproj.db.models import RefreshLog
-from nbaproj.db.refresh_log import RefreshOutcome, finish_refresh, start_refresh
+from nbaproj.db.refresh_log import (
+    RefreshOutcome,
+    finish_refresh,
+    reap_abandoned,
+    start_refresh,
+)
 
 NOW = datetime(2026, 10, 27, 12, 0, tzinfo=timezone.utc)
 
@@ -48,3 +53,19 @@ def test_finish_refresh_records_status_message_and_rows(session):
     assert row.message == "3 games loaded"
     assert row.rows_upserted == 42
     assert row.finished_at == later
+
+
+def test_reap_abandoned_marks_old_running_rows_failed(session):
+    """Running rows older than the limit are failed; recent and finished rows are not."""
+    old = start_refresh(session, trigger="cron", now=NOW - timedelta(hours=2))
+    recent = start_refresh(session, trigger="cron", now=NOW - timedelta(minutes=30))
+    done = start_refresh(session, trigger="cli", now=NOW - timedelta(hours=3))
+    finish_refresh(session, done, RefreshOutcome("succeeded"), NOW - timedelta(hours=2))
+
+    reaped = reap_abandoned(session, NOW, older_than=timedelta(hours=1))
+
+    assert reaped == 1
+    assert (old.status, old.finished_at) == ("failed", NOW)
+    assert "abandoned" in old.message
+    assert recent.status == "running"
+    assert done.status == "succeeded"

@@ -5,12 +5,12 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-class ConfigError(ValueError):
-    """Raised when a setting is missing or invalid."""
-
-
 DEFAULT_DATABASE_URL = "sqlite:///nbaproj.db"
 DEFAULT_TIMEZONE = "UTC"
+
+
+class ConfigError(ValueError):
+    """Raised when a setting is missing or invalid."""
 
 
 @dataclass(frozen=True)

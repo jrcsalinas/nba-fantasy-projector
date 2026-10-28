@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import Float, ForeignKey, Integer, String
+from sqlalchemy import Float, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from nbaproj.db.types import UtcDateTime
@@ -50,6 +50,7 @@ class GameLog(Base):
     """One player's box score line for one game."""
 
     __tablename__ = "game_log"
+    __table_args__ = (Index("ix_game_log_player_id", "player_id"),)
 
     game_id: Mapped[str] = mapped_column(
         String(10), ForeignKey("game.game_id"), primary_key=True

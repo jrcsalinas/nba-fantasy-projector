@@ -3,6 +3,7 @@
 from datetime import datetime, timezone
 
 from sqlalchemy import DateTime, TypeDecorator
+from sqlalchemy.engine import Dialect
 
 
 class UtcDateTime(TypeDecorator):
@@ -14,17 +15,17 @@ class UtcDateTime(TypeDecorator):
     impl = DateTime
     cache_ok = True
 
-    def process_bind_param(self, value: datetime | None, dialect):
+    def process_bind_param(self, value: datetime | None, dialect: Dialect) -> datetime | None:
         if value is None:
             return None
         if value.tzinfo is None:
             raise ValueError("naive datetime is not allowed; pass a timezone-aware value")
         return value.astimezone(timezone.utc).replace(tzinfo=None)
 
-    def process_literal_param(self, value: datetime | None, dialect):
+    def process_literal_param(self, value: datetime | None, dialect: Dialect) -> datetime | None:
         return self.process_bind_param(value, dialect)
 
-    def process_result_value(self, value: datetime | None, dialect):
+    def process_result_value(self, value: datetime | None, dialect: Dialect) -> datetime | None:
         if value is None:
             return None
         return value.replace(tzinfo=timezone.utc)

@@ -12,6 +12,7 @@ from nbaproj.ingestion.parsing import (
     ScoreboardGame,
     TeamInfo,
     game_type_from_id,
+    parse_game_id,
 )
 
 SOURCE_LIVE = "live"
@@ -25,7 +26,7 @@ GameHeader = ScoreboardGame | BoxScore
 
 def season_from_game_id(game_id: str) -> str:
     """Read the season label (for example ``2025-26``) from digits 4-5 of a game id."""
-    start_year = 2000 + int(game_id[3:5])
+    start_year = 2000 + int(parse_game_id(game_id)[3:5])
     return f"{start_year}-{(start_year + 1) % 100:02d}"
 
 
@@ -87,8 +88,10 @@ def _existing_games(session: Session, game_ids: list[str]) -> dict[str, Game]:
 def upsert_games(session: Session, headers: Sequence[GameHeader]) -> int:
     """Insert or update teams and games in bulk. Returns the number of games.
 
-    A stored ``final`` game is never moved back to a non-final status. The caller commits.
+    A stored ``final`` game is never moved back to a non-final status, and a game listed
+    twice is stored once, using its last entry. The caller commits.
     """
+    headers = list({header.game_id: header for header in headers}.values())
     teams = {team.team_id: team for h in headers for team in (h.home, h.away)}
     for team in teams.values():
         merge_team(session, team)

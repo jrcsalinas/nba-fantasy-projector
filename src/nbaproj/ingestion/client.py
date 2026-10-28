@@ -4,6 +4,7 @@ Requests go through nba_api's default behavior. No custom headers, proxies, or
 other workarounds: a blocked request is reported as a failure.
 """
 
+import json
 import logging
 import time
 from collections.abc import Callable
@@ -18,7 +19,22 @@ logger = logging.getLogger(__name__)
 
 REQUEST_TIMEOUT_SECONDS = 20
 STATS_TIMEOUT_SECONDS = 60
-TRANSIENT_ERRORS = (requests.RequestException, TimeoutError, ConnectionError)
+# A block page, rate-limit page, or empty body is not JSON: nba_api's ``get_dict()`` is a
+# plain ``json.loads``, so it surfaces as a JSONDecodeError. That is the failure the NBA
+# hosts produce most often, so it is retried like a network error.
+TRANSIENT_ERRORS = (
+    requests.RequestException,
+    TimeoutError,
+    ConnectionError,
+    json.JSONDecodeError,
+)
+
+
+# The endpoint classes in nba_api index into the response themselves, so a response that is
+# valid JSON but not the expected shape (no "players", an error object) raises one of these
+# from inside the call. That is the library choking on the NBA's data, not a bug of ours,
+# and retrying the same body is pointless, so it is reported once as a client error.
+MALFORMED_RESPONSE_ERRORS = (KeyError, TypeError, AttributeError)
 
 
 class NbaClientError(RuntimeError):
@@ -27,18 +43,29 @@ class NbaClientError(RuntimeError):
 
 @dataclass(frozen=True)
 class RetryPolicy:
-    """How many times to try a call, and how to wait between tries."""
+    """How many times to try a call, how to wait between tries, and how to pace calls.
+
+    ``pause`` is a wait after each successful call, so a loop over many games does not
+    hit the NBA hosts back to back. It is 0 here so tests never wait; the production
+    clients use ``LIVE_RETRY`` and ``STATS_RETRY``.
+    """
 
     attempts: int = 3
     base_delay: float = 1.0
     sleep: Callable[[float], None] = time.sleep
+    pause: float = 0.0
+
+
+PAUSE_SECONDS = 0.6
+LIVE_RETRY = RetryPolicy(pause=PAUSE_SECONDS)
+STATS_RETRY = RetryPolicy(pause=PAUSE_SECONDS)
 
 
 def call_with_retry(label: str, fetch: Callable[[], dict], policy: RetryPolicy) -> dict:
     """Call ``fetch``, retrying transient network errors with exponential backoff."""
     for attempt in range(1, policy.attempts + 1):
         try:
-            return fetch()
+            payload = fetch()
         except TRANSIENT_ERRORS as error:
             if attempt == policy.attempts:
                 raise NbaClientError(
@@ -49,6 +76,15 @@ def call_with_retry(label: str, fetch: Callable[[], dict], policy: RetryPolicy) 
                 "%s: attempt %d failed (%s), retrying in %.1fs", label, attempt, error, delay
             )
             policy.sleep(delay)
+            continue
+        except MALFORMED_RESPONSE_ERRORS as error:
+            raise NbaClientError(
+                f"{label}: unexpected response shape from the NBA endpoint: "
+                f"{type(error).__name__}: {error}"
+            ) from error
+        if policy.pause:
+            policy.sleep(policy.pause)
+        return payload
     raise NbaClientError(f"{label}: no attempts were made")
 
 
@@ -90,7 +126,7 @@ class LiveNbaClient:
         self,
         fetch_scoreboard: Callable[[], dict] = _fetch_live_scoreboard,
         fetch_boxscore: Callable[[str], dict] = _fetch_live_boxscore,
-        retry: RetryPolicy = RetryPolicy(),
+        retry: RetryPolicy = LIVE_RETRY,
     ):
         self._fetch_scoreboard = fetch_scoreboard
         self._fetch_boxscore = fetch_boxscore
@@ -135,7 +171,7 @@ class StatsNbaClient:
         fetch_schedule: Callable[[str], dict] = _fetch_schedule,
         fetch_player_log: Callable[[str], dict] = _fetch_player_log,
         fetch_team_log: Callable[[str], dict] = _fetch_team_log,
-        retry: RetryPolicy = RetryPolicy(),
+        retry: RetryPolicy = STATS_RETRY,
     ):
         self._fetch_schedule = fetch_schedule
         self._fetch_player_log = fetch_player_log

@@ -5,9 +5,11 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy import func, select
+from sqlalchemy.exc import OperationalError
 
 from nbaproj.db.locks import acquire_lock
 from nbaproj.db.models import Game, GameLog, JobLock, Player, RefreshLog
+from nbaproj.ingestion import backfill as backfill_module
 from nbaproj.ingestion.backfill import (
     backfill_season,
     build_backfill_lines,
@@ -16,10 +18,10 @@ from nbaproj.ingestion.backfill import (
 )
 from nbaproj.ingestion.client import NbaClientError
 from nbaproj.ingestion.loader import store_boxscore
-from nbaproj.ingestion.parsing import PlayerLine, parse_boxscore
+from nbaproj.ingestion.parsing import PayloadError, PlayerLine, parse_boxscore
 from nbaproj.ingestion.runs import LOCK_NAME
 from nbaproj.ingestion.schedule import parse_schedule, store_schedule
-from tests.ingestion.fakes import FakeStatsClient
+from tests.ingestion.fakes import FakeStatsClient, LockStealingStatsClient
 
 G1 = "0022500001"
 G2 = "0022500010"
@@ -214,3 +216,158 @@ def test_backfill_marks_the_log_failed_and_frees_the_lock_on_unexpected_errors(s
     log = session.scalars(select(RefreshLog)).one()
     assert (log.status, "boom" in log.message) == ("failed", True)
     assert _count(session, JobLock) == 0
+
+
+def test_build_backfill_lines_reports_a_null_row_as_value_error(
+    player_log_payload, team_log_payload
+):
+    """A null minutes value names the game and player instead of raising TypeError."""
+    result_set = player_log_payload["resultSets"][0]
+    minutes_at = result_set["headers"].index("MIN")
+    result_set["rowSet"][0][minutes_at] = None
+
+    with pytest.raises(ValueError, match=rf"{G1}.*1001"):
+        build_backfill_lines(player_log_payload, team_log_payload)
+
+
+def test_backfill_with_a_malformed_row_fails_names_the_row_and_stores_nothing(
+    session, schedule_payload, player_log_payload, team_log_payload
+):
+    """One bad row fails the season, says which row, and leaves nothing stored."""
+    result_set = player_log_payload["resultSets"][0]
+    result_set["rowSet"][0][result_set["headers"].index("MIN")] = None
+    client = FakeStatsClient(schedule_payload, player_log_payload, team_log_payload)
+
+    result = _backfill(session, client)
+
+    assert result.status == "failed"
+    assert G1 in result.message and "1001" in result.message
+    assert (_count(session, Game), _count(session, GameLog)) == (0, 0)
+
+
+class WriteWatchingClient(FakeStatsClient):
+    """A stats client that records how many games are in the database at each fetch."""
+
+    def __init__(self, session, schedule, player_log, team_log):
+        super().__init__(schedule, player_log, team_log)
+        self.session = session
+        self.games_at_fetch: list[int] = []
+
+    def _serve(self, name, season, payload):
+        self.games_at_fetch.append(_count(self.session, Game))
+        return super()._serve(name, season, payload)
+
+
+def test_backfill_fetches_everything_before_writing(
+    session, schedule_payload, player_log_payload, team_log_payload
+):
+    """No write transaction is open while the slow network fetches run."""
+    client = WriteWatchingClient(
+        session, schedule_payload, player_log_payload, team_log_payload
+    )
+
+    result = _backfill(session, client)
+
+    assert result.status == "succeeded"
+    assert client.games_at_fetch == [0, 0, 0]
+
+
+def test_backfill_rolls_back_the_schedule_when_storing_the_lines_fails(
+    session, schedule_payload, player_log_payload, team_log_payload, monkeypatch
+):
+    """A failure while writing undoes the schedule rows written just before it."""
+
+    def broken(*_args):
+        raise OperationalError("insert", {}, Exception("disk full"))
+
+    monkeypatch.setattr(backfill_module, "store_backfill", broken)
+    client = FakeStatsClient(schedule_payload, player_log_payload, team_log_payload)
+
+    result = _backfill(session, client)
+
+    assert result.status == "failed"
+    assert "disk full" in result.message
+    assert (_count(session, Game), _count(session, GameLog)) == (0, 0)
+
+
+def test_backfill_stops_when_the_lock_is_lost_before_writing(
+    session, schedule_payload, player_log_payload, team_log_payload
+):
+    """If another writer took the lock during the fetches, nothing is written."""
+    client = LockStealingStatsClient(
+        session, schedule_payload, player_log_payload, team_log_payload
+    )
+
+    result = _backfill(session, client)
+
+    assert result.status == "failed"
+    assert "lost the lock" in result.message
+    assert (_count(session, Game), _count(session, GameLog)) == (0, 0)
+    assert session.get(JobLock, LOCK_NAME).holder == "thief"
+
+
+def test_build_backfill_lines_collapses_duplicate_rows(
+    session, schedule_payload, player_log_payload, team_log_payload
+):
+    """The same player twice in one game is one line, and storing it does not fail."""
+    result_set = player_log_payload["resultSets"][0]
+    result_set["rowSet"].append(list(result_set["rowSet"][0]))
+
+    lines = build_backfill_lines(player_log_payload, team_log_payload)
+    store_schedule(session, parse_schedule(schedule_payload))
+    stored = store_backfill(session, lines)
+
+    assert [line.player_id for line in lines[G1]] == [1001, 1002, 2001, 2003]
+    assert stored.lines_stored == 4
+
+
+def test_build_backfill_lines_rejects_a_malformed_game_id(
+    player_log_payload, team_log_payload
+):
+    """A game log row with a bad game id is a payload error that names the row."""
+    result_set = player_log_payload["resultSets"][0]
+    result_set["rowSet"][0][result_set["headers"].index("GAME_ID")] = "not-an-id"
+
+    with pytest.raises(ValueError, match=r"not-an-id.*1001|game id"):
+        build_backfill_lines(player_log_payload, team_log_payload)
+
+
+def test_backfill_with_an_empty_schedule_fails(
+    session, schedule_payload, player_log_payload, team_log_payload
+):
+    """An empty schedule means a wrong season or a host that returned nothing."""
+    schedule_payload["leagueSchedule"]["gameDates"] = []
+    client = FakeStatsClient(schedule_payload, player_log_payload, team_log_payload)
+
+    result = _backfill(session, client)
+
+    assert result.status == "failed"
+    assert "schedule is empty" in result.message
+    assert (_count(session, Game), _count(session, GameLog)) == (0, 0)
+
+
+def test_backfill_with_no_lines_for_a_non_empty_schedule_is_skipped(
+    session, schedule_payload, player_log_payload, team_log_payload
+):
+    """A season with a schedule but no games played yet has nothing to backfill."""
+    player_log_payload["resultSets"][0]["rowSet"] = []
+    team_log_payload["resultSets"][0]["rowSet"] = []
+    client = FakeStatsClient(schedule_payload, player_log_payload, team_log_payload)
+
+    result = _backfill(session, client)
+
+    assert result.status == "skipped"
+    assert "no player lines" in result.message
+    assert (_count(session, Game), _count(session, GameLog)) == (0, 0)
+
+
+@pytest.mark.parametrize(("name", "reason"), [("x" * 129, "too long"), (None, "not text")])
+def test_build_backfill_lines_checks_the_player_name(
+    player_log_payload, team_log_payload, name, reason
+):
+    """The backfill enforces the same name rules as the live parser, before Postgres would."""
+    result_set = player_log_payload["resultSets"][0]
+    result_set["rowSet"][0][result_set["headers"].index("PLAYER_NAME")] = name
+
+    with pytest.raises(PayloadError, match=reason):
+        build_backfill_lines(player_log_payload, team_log_payload)
