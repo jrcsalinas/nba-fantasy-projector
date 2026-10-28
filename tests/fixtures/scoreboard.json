@@ -1,0 +1,48 @@
+{
+  "meta": {"version": 1, "code": 200},
+  "scoreboard": {
+    "gameDate": "2025-10-28",
+    "games": [
+      {
+        "gameId": "0022500001",
+        "gameStatus": 3,
+        "gameStatusText": "Final",
+        "gameTimeUTC": "2025-10-28T23:30:00Z",
+        "homeTeam": {"teamId": 1610612747, "teamName": "Lakers", "teamCity": "Los Angeles", "teamTricode": "LAL"},
+        "awayTeam": {"teamId": 1610612744, "teamName": "Warriors", "teamCity": "Golden State", "teamTricode": "GSW"}
+      },
+      {
+        "gameId": "0022500002",
+        "gameStatus": 2,
+        "gameStatusText": "Q3 05:12",
+        "gameTimeUTC": "2025-10-29T01:00:00Z",
+        "homeTeam": {"teamId": 1610612738, "teamName": "Celtics", "teamCity": "Boston", "teamTricode": "BOS"},
+        "awayTeam": {"teamId": 1610612752, "teamName": "Knicks", "teamCity": "New York", "teamTricode": "NYK"}
+      },
+      {
+        "gameId": "0012500003",
+        "gameStatus": 3,
+        "gameStatusText": "Final",
+        "gameTimeUTC": "2025-10-28T22:00:00Z",
+        "homeTeam": {"teamId": 1610612756, "teamName": "Suns", "teamCity": "Phoenix", "teamTricode": "PHX"},
+        "awayTeam": {"teamId": 1610612743, "teamName": "Nuggets", "teamCity": "Denver", "teamTricode": "DEN"}
+      },
+      {
+        "gameId": "0042500101",
+        "gameStatus": 3,
+        "gameStatusText": "Final",
+        "gameTimeUTC": "2025-10-28T20:00:00Z",
+        "homeTeam": {"teamId": 1610612760, "teamName": "Thunder", "teamCity": "Oklahoma City", "teamTricode": "OKC"},
+        "awayTeam": {"teamId": 1610612762, "teamName": "Jazz", "teamCity": "Utah", "teamTricode": "UTA"}
+      },
+      {
+        "gameId": "0022500004",
+        "gameStatus": 1,
+        "gameStatusText": "7:30 pm ET",
+        "gameTimeUTC": "2025-10-29T02:30:00Z",
+        "homeTeam": {"teamId": 1610612742, "teamName": "Mavericks", "teamCity": "Dallas", "teamTricode": "DAL"},
+        "awayTeam": {"teamId": 1610612759, "teamName": "Spurs", "teamCity": "San Antonio", "teamTricode": "SAS"}
+      }
+    ]
+  }
+}

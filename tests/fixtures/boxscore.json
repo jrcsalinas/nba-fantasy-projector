@@ -1,0 +1,98 @@
+{
+  "meta": {"version": 1, "code": 200},
+  "game": {
+    "gameId": "0022500001",
+    "gameStatus": 3,
+    "gameTimeUTC": "2025-10-28T23:30:00Z",
+    "homeTeam": {
+      "teamId": 1610612747,
+      "teamName": "Lakers",
+      "teamCity": "Los Angeles",
+      "teamTricode": "LAL",
+      "players": [
+        {
+          "personId": 1001,
+          "name": "Alex Home",
+          "played": "1",
+          "statistics": {
+            "minutes": "PT36M00.00S", "points": 28, "reboundsTotal": 7, "assists": 6,
+            "steals": 2, "blocks": 1, "threePointersMade": 3,
+            "fieldGoalsMade": 10, "fieldGoalsAttempted": 20,
+            "freeThrowsMade": 5, "freeThrowsAttempted": 5, "turnovers": 4
+          }
+        },
+        {
+          "personId": 1002,
+          "name": "Ben Home",
+          "played": "1",
+          "statistics": {
+            "minutes": "PT33M15.00S", "points": 12, "reboundsTotal": 9, "assists": 2,
+            "steals": 0, "blocks": 2, "threePointersMade": 0,
+            "fieldGoalsMade": 5, "fieldGoalsAttempted": 11,
+            "freeThrowsMade": 2, "freeThrowsAttempted": 4, "turnovers": 1
+          }
+        },
+        {
+          "personId": 1003,
+          "name": "Cal Home",
+          "played": "0",
+          "statistics": {
+            "minutes": "", "points": 0, "reboundsTotal": 0, "assists": 0,
+            "steals": 0, "blocks": 0, "threePointersMade": 0,
+            "fieldGoalsMade": 0, "fieldGoalsAttempted": 0,
+            "freeThrowsMade": 0, "freeThrowsAttempted": 0, "turnovers": 0
+          }
+        }
+      ],
+      "statistics": {
+        "minutes": "PT240M00.00S", "fieldGoalsAttempted": 90,
+        "freeThrowsAttempted": 25, "turnovers": 12
+      }
+    },
+    "awayTeam": {
+      "teamId": 1610612744,
+      "teamName": "Warriors",
+      "teamCity": "Golden State",
+      "teamTricode": "GSW",
+      "players": [
+        {
+          "personId": 2001,
+          "name": "Dan Away",
+          "played": "1",
+          "statistics": {
+            "minutes": "PT38M30.00S", "points": 31, "reboundsTotal": 4, "assists": 8,
+            "steals": 1, "blocks": 0, "threePointersMade": 5,
+            "fieldGoalsMade": 11, "fieldGoalsAttempted": 24,
+            "freeThrowsMade": 4, "freeThrowsAttempted": 6, "turnovers": 3
+          }
+        },
+        {
+          "personId": 2002,
+          "name": "Eli Away",
+          "played": "1",
+          "statistics": {
+            "minutes": "PT20M45.00S", "points": 8, "reboundsTotal": 3, "assists": 1,
+            "steals": 1, "blocks": 0, "threePointersMade": 2,
+            "fieldGoalsMade": 3, "fieldGoalsAttempted": 8,
+            "freeThrowsMade": 0, "freeThrowsAttempted": 0, "turnovers": 2
+          }
+        },
+        {
+          "personId": 2003,
+          "name": "Finn Away",
+          "played": "1",
+          "statistics": {
+            "minutes": "PT00M00.00S", "points": 0, "reboundsTotal": 0, "assists": 0,
+            "steals": 0, "blocks": 0, "threePointersMade": 0,
+            "fieldGoalsMade": 0, "fieldGoalsAttempted": 0,
+            "freeThrowsMade": 0, "freeThrowsAttempted": 0, "turnovers": 0
+          }
+        }
+      ],
+      "statistics": {
+        "minutes": "PT240M00.00S", "fieldGoalsAttempted": 88,
+        "freeThrowsAttempted": 20, "turnovers": 14
+      }
+    }
+  }
+}

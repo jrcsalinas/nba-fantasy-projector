@@ -1,4 +1,4 @@
-"""Shared fixtures for database tests."""
+"""Shared fixtures for all tests."""
 
 import pytest
 from sqlalchemy.orm import Session
