@@ -106,6 +106,23 @@ def test_the_ten_minute_interval_counts_each_kind_of_recent_run(
     assert (response.status_code, response.json()["status"]) == expected
 
 
+def test_a_run_that_has_not_taken_the_lock_yet_still_blocks_a_second_request(
+    cron_client, engine, monkeypatch
+):
+    """A double click: the background run has not started, so no lock and no log row exist yet.
+
+    The second request must still be turned away (409), not start a run the lock will reject.
+    """
+    monkeypatch.setattr("nbaproj.web.refresh_routes.run_refresh", lambda *_args: None)
+
+    first = cron_client.post("/refresh", headers=BEARER)
+    second = cron_client.post("/refresh", headers=BEARER)
+
+    assert first.status_code == 202
+    assert (second.status_code, second.json()) == (409, {"status": "running"})
+    assert _runs(engine) == []
+
+
 def test_a_refresh_after_the_interval_starts_again(cron_client, engine):
     """Past the minimum interval the next call starts a new run."""
     cron_client.post("/refresh", headers=BEARER)

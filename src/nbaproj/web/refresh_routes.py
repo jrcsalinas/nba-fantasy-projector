@@ -101,6 +101,8 @@ def run_refresh(app: FastAPI, trigger: str) -> None:
             ingest_final_games(session, app.state.nba_client, trigger, app.state.clock)
     except Exception:  # pylint: disable=broad-exception-caught
         logger.exception("Background refresh crashed")
+    finally:
+        app.state.refresh_in_flight = False
 
 
 def _is_form_post(request: Request) -> bool:
@@ -128,9 +130,16 @@ def refresh(
     session: Session = Depends(get_session),
 ) -> Response:
     """Start a refresh in the background unless one is running or one just ran."""
-    outcome = decide(session, request.app.state.clock())
-    if outcome == STARTED:
-        background.add_task(run_refresh, request.app, trigger)
+    state = request.app.state
+    # The run takes its lock and writes its log row only after this answer is sent. Until
+    # then neither exists, so a second request (a double click) would also decide "started"
+    # and cost a rejected run. This process remembers the run it has started; the gate keeps
+    # two requests from deciding at the same moment.
+    with state.refresh_gate:
+        outcome = BUSY if state.refresh_in_flight else decide(session, state.clock())
+        if outcome == STARTED:
+            state.refresh_in_flight = True
+            background.add_task(run_refresh, request.app, trigger)
     return _answer(request, trigger, outcome)
 
 

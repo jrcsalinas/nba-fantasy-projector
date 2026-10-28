@@ -2,6 +2,7 @@
 
 import logging
 import os
+import threading
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -132,6 +133,9 @@ def create_app(
     app.state.login_limiter = limiter or LoginLimiter()
     app.state.clock = utc_now  # tests replace both of these
     app.state.nba_client = LiveNbaClient()
+    # See refresh_routes: this process's own record of a run it has started and not finished.
+    app.state.refresh_gate = threading.Lock()
+    app.state.refresh_in_flight = False
     templates = Jinja2Templates(directory=str(TEMPLATES_DIR), context_processors=[_page_context])
     templates.env.filters["local_time"] = _local_time(settings.timezone)
     app.state.templates = templates
