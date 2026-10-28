@@ -104,16 +104,23 @@ def test_refresh_token_is_read_from_the_environment(web_env):
     assert load_web_settings(web_env).refresh_token == REFRESH_TOKEN
 
 
-@pytest.mark.parametrize("value", ["", "x" * 31])
-def test_a_short_refresh_token_is_rejected_without_echoing_it(web_env, value):
-    """A set but too short token stops startup, names the variable, and never shows the value."""
+@pytest.mark.parametrize("value", ["", "   "])
+def test_a_blank_refresh_token_means_no_token(web_env, value):
+    """Hosts that define every variable, empty or not, must not stop the app from starting."""
     web_env["REFRESH_TOKEN"] = value
+
+    assert load_web_settings(web_env).refresh_token is None
+
+
+def test_a_short_refresh_token_is_rejected_without_echoing_it(web_env):
+    """A set but too short token stops startup, names the variable, and never shows the value."""
+    web_env["REFRESH_TOKEN"] = "x" * 31
 
     with pytest.raises(ConfigError) as error:
         load_web_settings(web_env)
 
     assert "REFRESH_TOKEN" in str(error.value)
-    assert value == "" or value not in str(error.value)
+    assert "x" * 31 not in str(error.value)
 
 
 def test_the_refresh_token_is_not_in_the_settings_repr(web_env):

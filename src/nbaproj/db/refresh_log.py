@@ -9,7 +9,11 @@ from sqlalchemy.orm import Session
 from nbaproj.db.models import RefreshLog
 
 STATUS_RUNNING = "running"
-FINAL_STATUSES = frozenset({"succeeded", "failed", "skipped", "rejected"})
+STATUS_SUCCEEDED = "succeeded"
+STATUS_FAILED = "failed"
+STATUS_SKIPPED = "skipped"
+STATUS_REJECTED = "rejected"
+FINAL_STATUSES = frozenset({STATUS_SUCCEEDED, STATUS_FAILED, STATUS_SKIPPED, STATUS_REJECTED})
 TRIGGERS = frozenset({"cron", "ui", "cli"})
 ABANDONED_MESSAGE = "abandoned: the process stopped before this run finished"
 

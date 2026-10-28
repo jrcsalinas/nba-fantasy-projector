@@ -12,7 +12,7 @@ from nbaproj.web.app import create_app
 from nbaproj.web.settings import load_web_settings
 
 from tests.ingestion.fakes import FakeClient, only_games
-from tests.web.helpers import add_log, log_in
+from tests.web.helpers import add_live_run, add_log, log_in
 
 NOW = datetime(2026, 10, 29, 12, 0, tzinfo=timezone.utc)
 HOUR = timedelta(hours=1)
@@ -47,5 +47,16 @@ def seed_log_fixture(engine):
     def seed(status: str, ago: timedelta, message: str | None = None):
         with Session(engine) as session:
             add_log(session, NOW, status, ago, message)
+
+    return seed
+
+
+@pytest.fixture(name="seed_live_run")
+def seed_live_run_fixture(engine):
+    """Add a run in progress (a running row and its lock) that began ``ago`` before NOW."""
+
+    def seed(ago: timedelta):
+        with Session(engine) as session:
+            add_live_run(session, NOW, ago)
 
     return seed

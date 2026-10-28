@@ -70,10 +70,15 @@ def _owner_name(env: Mapping[str, str]) -> str:
 
 
 def _refresh_token(env: Mapping[str, str]) -> str | None:
-    """The bearer token the cron uses for ``/refresh``; unset means bearer calls are refused."""
-    if "REFRESH_TOKEN" not in env:
+    """The bearer token the cron uses for ``/refresh``.
+
+    Unset or blank means no token, so bearer calls are refused (a host that defines every
+    variable, empty or not, must not stop the app from starting). A non-blank token that is
+    too short is a mistake and stops startup.
+    """
+    token = env.get("REFRESH_TOKEN", "")
+    if not token.strip():
         return None
-    token = env["REFRESH_TOKEN"]
     if len(token) < MIN_SECRET_LENGTH:
         raise ConfigError(f"REFRESH_TOKEN must be at least {MIN_SECRET_LENGTH} characters")
     return token

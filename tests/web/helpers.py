@@ -8,7 +8,7 @@ from fastapi.routing import APIRoute
 from sqlalchemy.orm import Session
 from starlette.routing import Mount
 
-from nbaproj.db.models import RefreshLog
+from nbaproj.db.models import JobLock, RefreshLog
 
 from tests.web.conftest import TEST_PASSWORD
 
@@ -70,6 +70,20 @@ def add_log(
             status=status,
             message=message,
             rows_upserted=0,
+        )
+    )
+    session.commit()
+
+
+def add_live_run(session: Session, now: datetime, ago: timedelta) -> None:
+    """Add a run in progress: a running log row and the unexpired lock a real run holds."""
+    add_log(session, now, "running", ago)
+    session.add(
+        JobLock(
+            name="refresh",
+            holder="test-run",
+            locked_at=now - ago,
+            expires_at=now + timedelta(minutes=10),
         )
     )
     session.commit()

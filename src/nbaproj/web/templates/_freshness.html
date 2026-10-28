@@ -6,7 +6,7 @@
   {% elif state == "running" %}
   Refreshing data...
   {% elif state == "failed" %}
-  The last refresh failed at {{ freshness.failed_at | local_time }}: {{ freshness.message }}.
+  The last refresh failed at {{ freshness.failed_at | local_time }}.
   {% if freshness.last_checked %}Showing data from {{ freshness.last_checked | local_time }}.{% endif %}
   {% elif state == "stale" %}
   Data may be out of date: last checked {{ freshness.last_checked | local_time }}.

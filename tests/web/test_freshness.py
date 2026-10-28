@@ -5,9 +5,9 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from sqlalchemy.orm import Session
 
-from nbaproj.web.freshness import MESSAGE_LIMIT, load_freshness
+from nbaproj.web.freshness import load_freshness
 
-from tests.web.helpers import add_log
+from tests.web.helpers import add_live_run, add_log
 
 NOW = datetime(2026, 10, 29, 12, 0, tzinfo=timezone.utc)
 HOUR = timedelta(hours=1)
@@ -70,7 +70,6 @@ def test_a_failed_latest_run_is_failed_and_still_reports_the_last_good_check(ses
     freshness = load_freshness(session, NOW)
 
     assert freshness.state == "failed"
-    assert freshness.message == "could not check the scoreboard: timed out"
     assert freshness.failed_at == NOW - 1 * HOUR + timedelta(minutes=1)
     assert freshness.last_checked == NOW - 6 * HOUR + timedelta(minutes=1)
 
@@ -80,15 +79,13 @@ def test_a_later_success_clears_an_earlier_failure(session):
     _run(session, "failed", 3 * HOUR, "boom")
     _run(session, "succeeded", 1 * HOUR)
 
-    freshness = load_freshness(session, NOW)
-
-    assert freshness.state == "ok" and freshness.message is None
+    assert load_freshness(session, NOW).state == "ok"
 
 
 def test_a_run_still_in_progress_is_running(session):
     """A run that has started and not finished shows as running, with the last check kept."""
     _run(session, "succeeded", 6 * HOUR)
-    _run(session, "running", timedelta(minutes=2))
+    add_live_run(session, NOW, timedelta(minutes=2))
 
     freshness = load_freshness(session, NOW)
 
@@ -96,11 +93,24 @@ def test_a_run_still_in_progress_is_running(session):
     assert freshness.last_checked == NOW - 6 * HOUR + timedelta(minutes=1)
 
 
-def test_a_run_that_began_over_an_hour_ago_is_not_shown_as_running(session):
-    """A run whose process died stays "running" in the log until the next run reaps it."""
-    _run(session, "running", 2 * HOUR)
+@pytest.mark.parametrize("minutes", [30, 120])
+def test_a_running_row_with_no_live_lock_is_a_dead_run(session, minutes):
+    """A run whose process died stays "running" in the log; with no lock it is not running.
 
-    assert load_freshness(session, NOW).state == "never"
+    Thirty minutes is past the lock's ten but inside the hour the log takes to mark it
+    abandoned: the window in which the banner used to say "Refreshing" for a run that was gone.
+    """
+    _run(session, "succeeded", 6 * HOUR)
+    _run(session, "running", timedelta(minutes=minutes))
+
+    assert load_freshness(session, NOW).state == "ok"
+
+
+def test_a_run_holding_a_live_lock_is_running_however_long_it_has_gone(session):
+    """A long job (the backfill) renews its lock, so the lock, not the clock, says it is alive."""
+    add_live_run(session, NOW, 3 * HOUR)
+
+    assert load_freshness(session, NOW).state == "running"
 
 
 def test_a_rejected_run_is_ignored(session):
@@ -108,13 +118,4 @@ def test_a_rejected_run_is_ignored(session):
     _run(session, "succeeded", 3 * HOUR)
     _run(session, "rejected", 1 * HOUR, "another refresh holds the lock")
 
-    freshness = load_freshness(session, NOW)
-
-    assert freshness.state == "ok" and freshness.message is None
-
-
-def test_a_long_failure_message_is_clipped(session):
-    """The banner never shows more than MESSAGE_LIMIT characters of a failure."""
-    _run(session, "failed", 1 * HOUR, "x" * 500)
-
-    assert len(load_freshness(session, NOW).message) == MESSAGE_LIMIT
+    assert load_freshness(session, NOW).state == "ok"

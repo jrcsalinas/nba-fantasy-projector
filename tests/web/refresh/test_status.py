@@ -6,11 +6,9 @@ import pytest
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from nbaproj.db.locks import acquire_lock
 from nbaproj.db.models import RefreshLog
-from nbaproj.ingestion.refresh import LOCK_NAME
-from tests.web.helpers import csrf_token
-from tests.web.refresh.conftest import HOUR, NOW
+from tests.web.helpers import csrf_token, log_in
+from tests.web.refresh.conftest import HOUR
 
 POLL = 'hx-trigger="every 3s"'
 BUTTON = ">Refresh now</button>"
@@ -35,15 +33,13 @@ def _post_as_htmx(client):
     ],
 )
 def test_an_htmx_refresh_returns_the_banner_with_a_message_for_every_outcome(
-    make_client, seed_log, engine, outcome, message
+    make_client, seed_log, seed_live_run, outcome, message
 ):
     """A click always gets a 200 with the banner; it polls unless the data was just checked."""
     if outcome == "recent":
         seed_log("succeeded", timedelta(minutes=5))
     if outcome == "running":
-        seed_log("running", timedelta(minutes=1))
-        with Session(engine) as session:
-            assert acquire_lock(session, LOCK_NAME, "laptop-run", timedelta(minutes=10), NOW)
+        seed_live_run(timedelta(minutes=1))
 
     response = _post_as_htmx(make_client())
 
@@ -64,9 +60,9 @@ def test_a_plain_form_refresh_redirects_to_the_home_page(make_client, engine):
     assert _runs(engine) == 1
 
 
-def test_status_shows_running_with_a_polling_trigger(make_client, seed_log):
+def test_status_shows_running_with_a_polling_trigger(make_client, seed_live_run):
     """While a run is going the banner asks for itself again every three seconds."""
-    seed_log("running", timedelta(minutes=1))
+    seed_live_run(timedelta(minutes=1))
 
     response = make_client().get("/refresh/status")
 
@@ -86,6 +82,15 @@ def test_status_stops_polling_when_the_run_is_finished(make_client, seed_log):
     assert "Data checked" in response.text
     assert POLL not in response.text and "hx-get" not in response.text
     assert BUTTON in response.text
+
+
+def test_status_works_when_the_app_has_no_database(client):
+    """The status page reads through the same banner hook as every page: no database, no banner."""
+    assert log_in(client).status_code == 303
+
+    response = client.get("/refresh/status")
+
+    assert response.status_code == 200 and "freshness" not in response.text
 
 
 def test_status_needs_a_login(make_client):

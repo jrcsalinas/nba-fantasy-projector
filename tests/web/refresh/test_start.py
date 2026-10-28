@@ -92,6 +92,20 @@ def test_a_second_refresh_within_the_interval_starts_nothing(cron_client, engine
     assert _runs(engine) == [("cron", "succeeded")]
 
 
+@pytest.mark.parametrize("status", ["succeeded", "skipped", "running"])
+@pytest.mark.parametrize("minutes", [9, 11])
+def test_the_ten_minute_interval_counts_each_kind_of_recent_run(
+    cron_client, seed_log, status, minutes
+):
+    """A run that is running, succeeded or skipped blocks a refresh for ten minutes (no lock)."""
+    seed_log(status, timedelta(minutes=minutes))
+
+    response = cron_client.post("/refresh", headers=BEARER)
+
+    expected = (200, "recent") if minutes == 9 else (202, "started")
+    assert (response.status_code, response.json()["status"]) == expected
+
+
 def test_a_refresh_after_the_interval_starts_again(cron_client, engine):
     """Past the minimum interval the next call starts a new run."""
     cron_client.post("/refresh", headers=BEARER)

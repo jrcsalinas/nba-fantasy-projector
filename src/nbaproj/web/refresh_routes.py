@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from starlette.responses import JSONResponse, RedirectResponse, Response
 
 from nbaproj.db.models import JobLock, RefreshLog
+from nbaproj.db.refresh_log import STATUS_RUNNING, STATUS_SKIPPED, STATUS_SUCCEEDED
 from nbaproj.ingestion.refresh import LOCK_NAME, ingest_final_games
 from nbaproj.web.auth import require_login, verify_csrf
 from nbaproj.web.db import get_session
@@ -30,14 +31,15 @@ BEARER_SCHEME = "bearer"
 # recently means a new request starts nothing. A failed run does not count, so the cron's
 # retry after a failure is never turned away.
 MIN_INTERVAL = timedelta(minutes=10)
-RECENT_STATUSES = ("running", "succeeded", "skipped")
+RECENT_STATUSES = (STATUS_RUNNING, STATUS_SUCCEEDED, STATUS_SKIPPED)
 
-STARTED, RECENT, RUNNING = "started", "recent", "running"
-STATUS_CODES = {STARTED: 202, RECENT: 200, RUNNING: 409}
+# The answers /refresh gives. BUSY is what a caller sees as "running": the lock is held.
+STARTED, RECENT, BUSY = "started", "recent", "running"
+STATUS_CODES = {STARTED: 202, RECENT: 200, BUSY: 409}
 MESSAGES = {
     STARTED: "Refresh started.",
     RECENT: "Data was checked a moment ago, so no new refresh was started.",
-    RUNNING: "A refresh is already running.",
+    BUSY: "A refresh is already running.",
 }
 FORM_CONTENT_TYPE = "application/x-www-form-urlencoded"
 
@@ -70,14 +72,14 @@ async def authorize_refresh(request: Request) -> str:
 
 
 def decide(session: Session, now: datetime) -> str:
-    """What a request to refresh should do now: ``running``, ``recent``, or ``started``.
+    """What a request to refresh should do now: ``running`` (busy), ``recent``, or ``started``.
 
     The lock is the shared one, so a laptop run counts as running. Deciding before the run
     means a refused request writes nothing to the refresh log.
     """
     locked = exists().where(JobLock.name == LOCK_NAME, JobLock.expires_at > now)
     if session.scalar(select(locked)):
-        return RUNNING
+        return BUSY
     recent = exists().where(
         RefreshLog.status.in_(RECENT_STATUSES), RefreshLog.started_at > now - MIN_INTERVAL
     )
@@ -130,7 +132,7 @@ def refresh(
     return _answer(request, trigger, outcome)
 
 
-@router.get("/refresh/status", dependencies=[Depends(require_login), Depends(get_session)])
+@router.get("/refresh/status", dependencies=[Depends(require_login)])
 def refresh_status(request: Request) -> Response:
     """The banner as it is now: what the running banner asks for every three seconds."""
     return request.app.state.templates.TemplateResponse(request, "_freshness.html", {})

@@ -21,7 +21,7 @@ def test_signed_in_pages_show_the_freshness_banner(make_client, seed_log, path):
     assert "Data checked Oct 29, 2026 09:01 UTC." in html
 
 
-def test_the_banner_names_each_state(make_client, seed_log):
+def test_the_banner_names_each_state(make_client, seed_log, seed_live_run):
     """Never checked, failed (with what was last good), and running each read differently."""
     client = make_client()
     assert "No data check yet." in client.get("/").text
@@ -29,11 +29,10 @@ def test_the_banner_names_each_state(make_client, seed_log):
     seed_log("succeeded", 6 * HOUR)
     seed_log("failed", 1 * HOUR, "could not check the scoreboard: timed out")
     failed = client.get("/").text
-    assert "The last refresh failed at Oct 29, 2026 11:01 UTC" in failed
-    assert "could not check the scoreboard: timed out" in failed
+    assert "The last refresh failed at Oct 29, 2026 11:01 UTC." in failed
     assert "Showing data from Oct 29, 2026 06:01 UTC." in failed
 
-    seed_log("running", HOUR // 30)
+    seed_live_run(HOUR // 30)
     assert "Refreshing data..." in client.get("/").text
 
 
@@ -64,14 +63,15 @@ def test_the_banner_shows_times_in_the_configured_timezone(make_client, seed_log
     assert "Data checked Oct 29, 2026 05:01 EDT." in html
 
 
-def test_the_banner_escapes_the_run_message(make_client, seed_log):
-    """A failure message is data from outside, so it is escaped like everything else."""
-    seed_log("failed", 1 * HOUR, "<script>alert(1)</script>")
+def test_the_banner_never_shows_the_failure_message(make_client, seed_log):
+    """A run's message can hold SQL, a host name or a URL: it stays in the log, not on the page."""
+    seed_log("failed", 1 * HOUR, "SELECT secret FROM x <script>alert(1)</script> db.internal:5432")
 
     html = make_client().get("/").text
 
-    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
-    assert "<script>alert(1)" not in html
+    assert "The last refresh failed at" in html
+    for leaked in ("SELECT", "secret", "db.internal", "<script>alert", "&lt;script"):
+        assert leaked not in html
 
 
 @pytest.mark.parametrize("path", PAGES)
