@@ -31,6 +31,7 @@ from nbaproj.web.auth import (
     protected_router,
 )
 from nbaproj.web.freshness import load_freshness
+from nbaproj.web.refresh_routes import router as refresh_router
 from nbaproj.web.roster_routes import router as roster_router
 from nbaproj.web.security import LoginLimiter
 from nbaproj.web.settings import WebSettings, load_web_settings
@@ -177,6 +178,7 @@ def create_app(
     app.include_router(open_router)
     app.include_router(protected_router)
     app.include_router(roster_router)
+    app.include_router(refresh_router)
     # Open on purpose: it holds only the vendored HTMX file and its license.
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
     return app
