@@ -16,6 +16,8 @@ from nbaproj.web.db import get_session
 
 RECENT_CHANGES = 10
 HISTORY_LIMIT = 50
+# Player ids are 32-bit integers in the database; anything outside is not a player.
+MAX_PLAYER_ID = 2**31 - 1
 
 router = APIRouter(dependencies=[Depends(require_login), Depends(verify_csrf)])
 
@@ -73,7 +75,7 @@ def _after_change(request: Request, service: RosterService, message: str) -> Res
 @router.post("/roster/add")
 def roster_add(
     request: Request,
-    player_id: int = Form(),
+    player_id: int = Form(ge=1, le=MAX_PLAYER_ID),
     service: RosterService = Depends(get_roster_service),
     session: Session = Depends(get_session),
 ) -> Response:
@@ -85,6 +87,8 @@ def roster_add(
         raise HTTPException(status_code=404) from None
     except IntegrityError:
         session.rollback()
+        if player_id not in {player.player_id for player in service.players()}:
+            raise  # not a duplicate: some other constraint failed, which is a bug
         message = "That player is already on your roster."
     else:
         if result.changed:
@@ -97,7 +101,7 @@ def roster_add(
 @router.post("/roster/remove")
 def roster_remove(
     request: Request,
-    player_id: int = Form(),
+    player_id: int = Form(ge=1, le=MAX_PLAYER_ID),
     service: RosterService = Depends(get_roster_service),
     session: Session = Depends(get_session),
 ) -> Response:

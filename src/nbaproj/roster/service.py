@@ -8,7 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from nbaproj.db.models import Player, RosterChange, RosterEntry
@@ -127,10 +127,15 @@ class RosterService:
         _check_source(source)
         player = self._session.get(Player, player_id)
         name = player.full_name if player is not None else ""
-        entry = self._session.get(RosterEntry, (self._owner, player_id))
-        if entry is None:
+        # One DELETE decides who removed the row: a second request that read the row before
+        # the first one committed deletes nothing, so it must not record a removal.
+        deleted = self._session.execute(
+            delete(RosterEntry).where(
+                RosterEntry.owner == self._owner, RosterEntry.player_id == player_id
+            )
+        )
+        if deleted.rowcount == 0:
             return ChangeResult(False, player_id, name)
-        self._session.delete(entry)
         self._session.add(
             RosterChange(
                 owner=self._owner,
@@ -159,7 +164,7 @@ class RosterService:
             select(
                 RosterChange.action,
                 RosterChange.player_id,
-                Player.full_name,
+                Player.full_name.label("name"),
                 RosterChange.changed_at,
                 RosterChange.source,
             )
@@ -168,4 +173,13 @@ class RosterService:
             .order_by(RosterChange.changed_at.desc(), RosterChange.id.desc())
             .limit(limit)
         )
-        return [ChangeRecord(*row) for row in rows]
+        return [
+            ChangeRecord(
+                action=row.action,
+                player_id=row.player_id,
+                name=row.name,
+                changed_at=row.changed_at,
+                source=row.source,
+            )
+            for row in rows
+        ]

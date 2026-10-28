@@ -14,13 +14,18 @@ from dataclasses import dataclass
 from nba_api.stats.static import players as nba_players
 
 MIN_QUERY_LENGTH = 2
+# Letters, not accents: NFKD leaves them whole and they would be dropped as non-ASCII.
+TRANSLITERATIONS = str.maketrans(
+    {"ø": "o", "ł": "l", "đ": "d", "ð": "d", "þ": "th", "æ": "ae", "œ": "oe", "ß": "ss"}
+)
 DEFAULT_LIMIT = 10
 
 
 def normalize_name(name: str) -> str:
     """Lowercase, fold accents to base letters, and turn punctuation into single spaces."""
-    folded = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode("ascii")
-    return re.sub(r"[^a-z0-9]+", " ", folded.lower()).strip()
+    lowered = name.casefold().translate(TRANSLITERATIONS)
+    folded = unicodedata.normalize("NFKD", lowered).encode("ascii", "ignore").decode("ascii")
+    return re.sub(r"[^a-z0-9]+", " ", folded).strip()
 
 
 @dataclass(frozen=True)

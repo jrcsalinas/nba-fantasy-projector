@@ -110,3 +110,23 @@ def test_no_real_name_loses_a_letter_when_normalized():
 def test_real_list_finds_a_known_player_without_accents():
     """Typing "jokic" finds Nikola Jokić."""
     assert _names(default_directory().search("jokic")) == ["Nikola Jokić"]
+
+
+@pytest.mark.parametrize(
+    ("typed", "player_id"),
+    [("soren", 1), ("lukasz", 2), ("dorde", 3), ("strasse", 4), ("aelfric", 5), ("thor", 6)],
+)
+def test_letters_that_do_not_decompose_are_folded_to_their_plain_spelling(typed, player_id):
+    """Ø, Ł, Đ, ß and friends are letters, not accents: they must not vanish."""
+    directory = PlayerDirectory(
+        [
+            (1, "Søren Ørsted"),
+            (2, "Łukasz Kowalski"),
+            (3, "Đorđe Nikolić"),
+            (4, "Jan Straße"),
+            (5, "Ælfric Smith"),
+            (6, "Þor Jones"),
+        ]
+    )
+
+    assert [match.player_id for match in directory.search(typed)] == [player_id]

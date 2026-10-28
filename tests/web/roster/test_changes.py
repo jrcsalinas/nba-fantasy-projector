@@ -88,18 +88,53 @@ def test_an_invalid_player_id_is_a_generic_400_not_a_validation_dump(roster_clie
         assert leaked not in response.text
 
 
-def test_a_simultaneous_duplicate_add_means_already_on_your_roster(roster_client, monkeypatch):
-    """Two adds racing each other: the loser of the race is told it is already there."""
+def test_a_simultaneous_duplicate_add_means_already_on_your_roster(
+    roster_client, seed, engine, monkeypatch
+):
+    """The loser of a real race hits the real primary key and is told it is already there.
 
-    def lose_the_race(*_args, **_kwargs):
-        raise IntegrityError("INSERT INTO roster", {}, Exception("UNIQUE constraint failed"))
+    The race is staged by making this one request see a stale, empty roster: the insert it
+    then attempts collides with the row the winner already committed.
+    """
+    seed(("add", 1, T0))
+    real_get = Session.get
 
-    monkeypatch.setattr(RosterService, "add", lose_the_race)
+    def stale_get(session, entity, ident, *args, **kwargs):
+        if entity is RosterEntry:
+            return None
+        return real_get(session, entity, ident, *args, **kwargs)
+
+    monkeypatch.setattr(Session, "get", stale_get)
 
     response = _htmx_post(roster_client, "/roster/add", player_id="1")
 
     assert response.status_code == 200
     assert "already on your roster" in response.text
+    assert _count(engine, RosterEntry) == 1 and _count(engine, RosterChange) == 1
+
+
+def test_an_integrity_error_that_is_not_a_duplicate_is_not_called_one(roster_client, monkeypatch):
+    """Only a row that is really on the roster counts as "already": anything else is a bug."""
+
+    def broken(*_args, **_kwargs):
+        raise IntegrityError("INSERT INTO roster", {}, Exception("FOREIGN KEY constraint failed"))
+
+    monkeypatch.setattr(RosterService, "add", broken)
+
+    with pytest.raises(IntegrityError):
+        _htmx_post(roster_client, "/roster/add", player_id="1")
+
+
+@pytest.mark.parametrize("path", ["/roster/add", "/roster/remove"])
+@pytest.mark.parametrize("player_id", ["0", "-1", "2147483648", str(10**30)])
+def test_an_out_of_range_player_id_is_a_generic_400(roster_client, path, player_id):
+    """An id no database column could hold never reaches the database."""
+    response = _htmx_post(roster_client, path, player_id=player_id)
+
+    assert response.status_code == 400
+    assert "not valid" in response.text
+    for leaked in ("greater_than", "less_than", "Input should be"):
+        assert leaked not in response.text
 
 
 def test_remove_over_htmx_returns_the_updated_panel(roster_client, seed):
