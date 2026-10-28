@@ -26,6 +26,7 @@ class WebSettings:
     cookie_secure: bool = True
     owner_name: str = DEFAULT_OWNER_NAME
     timezone: str = "UTC"
+    refresh_token: str | None = field(default=None, repr=False)
 
 
 def _required(env: Mapping[str, str], name: str) -> str:
@@ -68,6 +69,16 @@ def _owner_name(env: Mapping[str, str]) -> str:
     return owner
 
 
+def _refresh_token(env: Mapping[str, str]) -> str | None:
+    """The bearer token the cron uses for ``/refresh``; unset means bearer calls are refused."""
+    if "REFRESH_TOKEN" not in env:
+        return None
+    token = env["REFRESH_TOKEN"]
+    if len(token) < MIN_SECRET_LENGTH:
+        raise ConfigError(f"REFRESH_TOKEN must be at least {MIN_SECRET_LENGTH} characters")
+    return token
+
+
 def load_web_settings(env: Mapping[str, str]) -> WebSettings:
     """Read and validate the web settings from ``env``. Raises ``ConfigError``."""
     return WebSettings(
@@ -76,4 +87,5 @@ def load_web_settings(env: Mapping[str, str]) -> WebSettings:
         cookie_secure=_cookie_secure(env),
         owner_name=_owner_name(env),
         timezone=load_settings(env).app_timezone,
+        refresh_token=_refresh_token(env),
     )

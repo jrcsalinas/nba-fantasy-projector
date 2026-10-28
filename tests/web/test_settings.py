@@ -87,3 +87,37 @@ def test_web_settings_rejects_a_bad_timezone(web_env):
 
     with pytest.raises(ConfigError, match="APP_TIMEZONE"):
         load_web_settings(web_env)
+
+
+REFRESH_TOKEN = "refresh-token-" + "r" * 20
+
+
+def test_refresh_token_is_optional_and_off_by_default(web_env):
+    """Without REFRESH_TOKEN there is no token, so bearer calls can never match."""
+    assert load_web_settings(web_env).refresh_token is None
+
+
+def test_refresh_token_is_read_from_the_environment(web_env):
+    """A long enough REFRESH_TOKEN is kept as it is."""
+    web_env["REFRESH_TOKEN"] = REFRESH_TOKEN
+
+    assert load_web_settings(web_env).refresh_token == REFRESH_TOKEN
+
+
+@pytest.mark.parametrize("value", ["", "x" * 31])
+def test_a_short_refresh_token_is_rejected_without_echoing_it(web_env, value):
+    """A set but too short token stops startup, names the variable, and never shows the value."""
+    web_env["REFRESH_TOKEN"] = value
+
+    with pytest.raises(ConfigError) as error:
+        load_web_settings(web_env)
+
+    assert "REFRESH_TOKEN" in str(error.value)
+    assert value == "" or value not in str(error.value)
+
+
+def test_the_refresh_token_is_not_in_the_settings_repr(web_env):
+    """Printing the settings (a log line, a traceback) never prints the token."""
+    web_env["REFRESH_TOKEN"] = REFRESH_TOKEN
+
+    assert REFRESH_TOKEN not in repr(load_web_settings(web_env))
