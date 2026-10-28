@@ -1,12 +1,14 @@
-<div id="freshness" class="banner banner-{{ freshness.state }}" role="status">
-  {% if freshness.state == "never" %}
+{% if freshness %}
+{% set state = "running" if starting else freshness.state %}
+<div id="freshness" class="banner banner-{{ state }}" role="status"{% if state == "running" %} hx-get="/refresh/status" hx-trigger="every 3s" hx-swap="outerHTML"{% endif %}>
+  {% if state == "never" %}
   No data check yet.
-  {% elif freshness.state == "running" %}
+  {% elif state == "running" %}
   Refreshing data...
-  {% elif freshness.state == "failed" %}
+  {% elif state == "failed" %}
   The last refresh failed at {{ freshness.failed_at | local_time }}: {{ freshness.message }}.
   {% if freshness.last_checked %}Showing data from {{ freshness.last_checked | local_time }}.{% endif %}
-  {% elif freshness.state == "stale" %}
+  {% elif state == "stale" %}
   Data may be out of date: last checked {{ freshness.last_checked | local_time }}.
   {% else %}
   Data checked {{ freshness.last_checked | local_time }}.
@@ -14,4 +16,12 @@
   New games loaded {{ freshness.last_loaded | local_time }}.
   {% endif %}
   {% endif %}
+  {% if refresh_message %}<p class="muted">{{ refresh_message }}</p>{% endif %}
+  {% if state != "running" %}
+  <form method="post" action="/refresh" hx-post="/refresh" hx-target="#freshness" hx-swap="outerHTML">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit">Refresh now</button>
+  </form>
+  {% endif %}
 </div>
+{% endif %}

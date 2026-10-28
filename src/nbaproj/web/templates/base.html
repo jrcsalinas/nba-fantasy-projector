@@ -24,12 +24,15 @@
     .muted { color: var(--muted); }
     .banner { margin: 0 0 1rem; padding: .5rem .75rem; border: 1px solid var(--line); border-radius: 8px; background: var(--card); font-size: .9rem; }
     .banner-failed, .banner-stale { border-color: #b00020; }
+    .banner p { margin: .25rem 0 0; }
+    .banner form { margin: 0; }
+    .banner button { margin-top: .5rem; }
   </style>
   {% if signed_in %}<script src="/static/htmx.min.js" defer></script>{% endif %}
 </head>
 <body{% if signed_in %} hx-headers='{{ {"X-CSRF-Token": csrf_token} | tojson }}'{% endif %}>
   <main>
-    {% if freshness %}{% include "_freshness.html" %}{% endif %}
+    {% include "_freshness.html" %}
     {% block content %}{% endblock %}
   </main>
 </body>

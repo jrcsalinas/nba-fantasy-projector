@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, BackgroundTasks, Depends, FastAPI, HTTPException, Request
 from sqlalchemy import exists, select
 from sqlalchemy.orm import Session
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, RedirectResponse, Response
 
 from nbaproj.db.models import JobLock, RefreshLog
 from nbaproj.ingestion.refresh import LOCK_NAME, ingest_final_games
@@ -34,6 +34,12 @@ RECENT_STATUSES = ("running", "succeeded", "skipped")
 
 STARTED, RECENT, RUNNING = "started", "recent", "running"
 STATUS_CODES = {STARTED: 202, RECENT: 200, RUNNING: 409}
+MESSAGES = {
+    STARTED: "Refresh started.",
+    RECENT: "Data was checked a moment ago, so no new refresh was started.",
+    RUNNING: "A refresh is already running.",
+}
+FORM_CONTENT_TYPE = "application/x-www-form-urlencoded"
 
 
 def _bearer_matches(header: str, token: str | None) -> bool:
@@ -93,15 +99,38 @@ def run_refresh(app: FastAPI, trigger: str) -> None:
         logger.exception("Background refresh crashed")
 
 
+def _is_form_post(request: Request) -> bool:
+    return request.headers.get("content-type", "").startswith(FORM_CONTENT_TYPE)
+
+
+def _answer(request: Request, trigger: str, outcome: str) -> Response:
+    """The cron gets JSON with a real status code. You get the banner for an HTMX click
+    (always 200, because HTMX does not swap an error response) or a redirect home for a
+    plain form post; any other call from a session gets the JSON too.
+    """
+    if trigger == TRIGGER_UI and request.headers.get("HX-Request"):
+        context = {"refresh_message": MESSAGES[outcome], "starting": outcome == STARTED}
+        return request.app.state.templates.TemplateResponse(request, "_freshness.html", context)
+    if trigger == TRIGGER_UI and _is_form_post(request):
+        return RedirectResponse("/", status_code=303)
+    return JSONResponse({"status": outcome}, status_code=STATUS_CODES[outcome])
+
+
 @router.post("/refresh")
 def refresh(
     request: Request,
     background: BackgroundTasks,
     trigger: str = Depends(authorize_refresh),
     session: Session = Depends(get_session),
-) -> JSONResponse:
+) -> Response:
     """Start a refresh in the background unless one is running or one just ran."""
     outcome = decide(session, request.app.state.clock())
     if outcome == STARTED:
         background.add_task(run_refresh, request.app, trigger)
-    return JSONResponse({"status": outcome}, status_code=STATUS_CODES[outcome])
+    return _answer(request, trigger, outcome)
+
+
+@router.get("/refresh/status", dependencies=[Depends(require_login), Depends(get_session)])
+def refresh_status(request: Request) -> Response:
+    """The banner as it is now: what the running banner asks for every three seconds."""
+    return request.app.state.templates.TemplateResponse(request, "_freshness.html", {})
