@@ -82,8 +82,9 @@ latest game day in the data, so an off day does not empty the page.
 Each card shows:
 
 - **A score and a label.** The score is the sum of nine category trends. **Hot** is the top
-  tenth of all players by that score, **Cold** the bottom tenth, **Steady** the rest. With
-  fewer than 20 players to compare (very early in a season) there is no label.
+  tenth of all qualifying players by that score, **Cold** the bottom tenth, **Steady** the
+  rest (players tied at the cut-off are not labelled, so at most a tenth is). With fewer than
+  20 players to compare (very early in a season) there is no label.
 - **One sentence** naming the two biggest movers and a big minutes change, for example
   "AST +2.1, REB +1.4 over the last 14 days; minutes +6.0". Turnovers read "1.1 fewer TO",
   because fewer is better.
@@ -97,7 +98,10 @@ Each card shows:
 A player with too few games shows "No trend" and why ("only 1 game in the last 7 days", "no
 games this season"). Under 3 games in the window the card says **Low sample: read with care**.
 Everyone with enough games is scored, not only your roster, because the z-scores are measured
-against all players. The page needs game data: load a season with the backfill command above,
+against all players. "The season" is every game stored for the latest season (regular season,
+play-in and playoffs alike), so once the playoffs start they are part of both the season and the
+window. The league's free-throw and field-goal averages that impact is measured against are
+pooled over every player's games in the period, including players with too few games to be scored. The page needs game data: load a season with the backfill command above,
 or wait for the daily refresh.
 
 ## Refreshing the data

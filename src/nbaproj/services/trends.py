@@ -2,7 +2,8 @@
 
 The windows are calendar days in the app's timezone, ending at the latest game day in the
 data (not at today's date, so an off day or a stale refresh does not empty the page). The
-season is the season of the latest game; only its lines are read. Every player in it is
+season is the season of the latest game, with every game stored for it (regular season,
+play-in and playoffs); only its lines are read. Every player in it is
 scored, because the z-scores are measured against all of them, but only the roster's
 players come back.
 """
