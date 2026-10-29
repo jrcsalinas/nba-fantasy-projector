@@ -2,26 +2,13 @@
 
 import math
 
-import pandas as pd
 import pytest
 
 from nbaproj.scoring.categories import CATEGORIES
-from nbaproj.scoring.stats import STAT_COLUMNS
 from nbaproj.scoring.zscores import z_scores
+from tests.scoring.conftest import make_stats
 
 KEYS = [category.key for category in CATEGORIES]
-
-
-def make_stats(**players: dict) -> pd.DataFrame:
-    """Period stats for players named ``p<id>``; whatever a player does not name is zero."""
-    rows = {}
-    for name, values in players.items():
-        row = {column: 0.0 for column in STAT_COLUMNS}
-        row.update({"games": 10, **values})
-        rows[int(name.removeprefix("p"))] = row
-    stats = pd.DataFrame.from_dict(rows, orient="index", columns=STAT_COLUMNS)
-    stats.index.name = "player_id"
-    return stats
 
 
 def test_z_scores_use_the_population_mean_and_standard_deviation():

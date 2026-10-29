@@ -5,6 +5,8 @@ from datetime import date
 import pandas as pd
 import pytest
 
+from nbaproj.scoring.stats import STAT_COLUMNS
+
 LOG_COLUMNS = [
     "player_id",
     "game_day",
@@ -61,3 +63,15 @@ def make_logs(*lines: dict) -> pd.DataFrame:
 def logs_factory_fixture():
     """``make_logs`` as a fixture, for tests that prefer it."""
     return make_logs
+
+
+def make_stats(**players: dict) -> pd.DataFrame:
+    """Period stats for players named ``p<id>``; whatever a player does not name is zero."""
+    rows = {}
+    for name, values in players.items():
+        row = {column: 0.0 for column in STAT_COLUMNS}
+        row.update({"games": 10, **values})
+        rows[int(name.removeprefix("p"))] = row
+    stats = pd.DataFrame.from_dict(rows, orient="index", columns=STAT_COLUMNS)
+    stats.index.name = "player_id"
+    return stats
