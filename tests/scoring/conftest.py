@@ -5,25 +5,8 @@ from datetime import date
 import pandas as pd
 import pytest
 
-from nbaproj.scoring.stats import STAT_COLUMNS
+from nbaproj.scoring.stats import LOG_COLUMNS, STAT_COLUMNS
 
-LOG_COLUMNS = [
-    "player_id",
-    "game_day",
-    "minutes",
-    "pts",
-    "reb",
-    "ast",
-    "stl",
-    "blk",
-    "tpm",
-    "fgm",
-    "fga",
-    "ftm",
-    "fta",
-    "tov",
-    "usage_pct",
-]
 ZERO_LINE = {
     "minutes": 0.0,
     "pts": 0,
@@ -56,7 +39,7 @@ def make_logs(*lines: dict) -> pd.DataFrame:
         row = {**ZERO_LINE, **line}
         row["game_day"] = day(row.pop("day"))
         rows.append(row)
-    return pd.DataFrame(rows, columns=LOG_COLUMNS)
+    return pd.DataFrame(rows, columns=list(LOG_COLUMNS))
 
 
 @pytest.fixture(name="logs_factory")

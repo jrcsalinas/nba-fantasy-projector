@@ -9,6 +9,24 @@ from datetime import date
 
 import pandas as pd
 
+# The columns of a game log frame, in the order callers build it.
+LOG_COLUMNS = (
+    "player_id",
+    "game_day",
+    "minutes",
+    "pts",
+    "reb",
+    "ast",
+    "stl",
+    "blk",
+    "tpm",
+    "fgm",
+    "fga",
+    "ftm",
+    "fta",
+    "tov",
+    "usage_pct",
+)
 # Averaged per game as they are.
 PER_GAME_COLUMNS = ("minutes", "pts", "reb", "ast", "stl", "blk", "tpm", "tov")
 SHOT_COLUMNS = ("fgm", "fga", "ftm", "fta")
