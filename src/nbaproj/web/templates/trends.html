@@ -20,7 +20,7 @@
     <p class="muted">{{ card.minutes }} &middot; {{ card.usage }}</p>
     <ul class="cats">
       {% for cell in card.cells %}
-      <li class="cat cat-{{ cell.tone }}"><span class="cat-label">{{ cell.label }}</span> <span>{{ cell.change }}</span> <span class="muted">z {{ cell.z_change }}</span></li>
+      <li class="cat cat-{{ cell.tone }}"><span class="cat-label">{{ cell.label }}</span> <span>{{ cell.change }}</span><span class="cat-z muted">z {{ cell.z_change }}</span></li>
       {% endfor %}
     </ul>
     <p class="muted">{{ card.games }}{% if card.low_sample %} &middot; <strong>Low sample: read with care</strong>{% endif %}</p>

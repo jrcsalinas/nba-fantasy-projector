@@ -33,8 +33,10 @@
     .badge { font-size: .85rem; font-weight: 600; padding: .1rem .5rem; border-radius: 1rem; border: 1px solid var(--line); }
     .badge-up, .cat-up { color: var(--good); }
     .badge-down, .cat-down { color: var(--bad); }
-    ul.cats { list-style: none; padding: 0; margin: .5rem 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr)); gap: .25rem .75rem; }
-    .cat-label { font-weight: 600; display: inline-block; min-width: 2.6rem; }
+    ul.cats { list-style: none; padding: 0; margin: .5rem 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr)); gap: .4rem .75rem; }
+    .cat { white-space: nowrap; display: grid; grid-template-columns: 2.7rem 1fr; column-gap: .25rem; align-items: baseline; }
+    .cat-label { font-weight: 600; grid-row: span 2; }
+    .cat-z { font-size: .8rem; }
     .banner form { margin: 0; }
     .banner button { margin-top: .5rem; }
   </style>
