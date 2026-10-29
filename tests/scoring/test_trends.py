@@ -7,7 +7,13 @@ import pytest
 from pandas.testing import assert_frame_equal
 
 import nbaproj.scoring
-from nbaproj.scoring.trends import CategoryTrend, build_reason, score_trends, trend_label
+from nbaproj.scoring.trends import (
+    CategoryTrend,
+    build_reason,
+    label_thresholds,
+    score_trends,
+    trend_label,
+)
 from tests.scoring.conftest import make_stats
 
 
@@ -128,21 +134,62 @@ def test_fewer_than_three_window_games_is_a_low_sample(window_games, low_sample)
     assert trend.window_games == window_games
 
 
-def test_overall_score_is_the_sum_and_the_label_follows_the_thresholds():
-    """Points and rebounds both swap places: 2.4495 + 2.4495 = 4.899, so Hot; the mirror is Cold."""
+def test_overall_score_is_the_sum_of_the_category_trends():
+    """Points and rebounds both swap places: 2.4495 + 2.4495 = 4.899, and the mirror is -4.899."""
     season, window = _crossing_points()
     season["reb"] = [10.0, 20.0, 30.0]
     window["reb"] = [30.0, 20.0, 10.0]
 
-    hot = _trend(season, window, 1)
-    steady = _trend(season, window, 2)
-    cold = _trend(season, window, 3)
+    rising = _trend(season, window, 1)
+    flat = _trend(season, window, 2)
+    falling = _trend(season, window, 3)
 
-    assert hot.overall == pytest.approx(4.89898, abs=1e-4) and hot.label == "Hot"
-    assert steady.overall == pytest.approx(0.0, abs=1e-9) and steady.label == "Steady"
-    assert cold.overall == pytest.approx(-4.89898, abs=1e-4) and cold.label == "Cold"
-    labels = [trend_label(x) for x in (2.0, 1.99, -1.99, -2.0)]
-    assert labels == ["Hot", "Steady", "Steady", "Cold"]
+    assert rising.overall == pytest.approx(4.89898, abs=1e-4)
+    assert flat.overall == pytest.approx(0.0, abs=1e-9)
+    assert falling.overall == pytest.approx(-4.89898, abs=1e-4)
+    assert rising.overall == pytest.approx(sum(c.z_change for c in rising.categories))
+
+
+def test_label_thresholds_are_the_top_and_bottom_tenth_of_the_population():
+    """Overall scores 1 to 20: the 90th percentile is 18.1 and the 10th is 2.9."""
+    thresholds = label_thresholds([float(n) for n in range(1, 21)])
+
+    assert thresholds == pytest.approx((18.1, 2.9))
+    assert [trend_label(x, thresholds) for x in (19.0, 18.1, 18.0, 3.0, 2.9, 1.0)] == [
+        "Hot",
+        "Hot",
+        "Steady",
+        "Steady",
+        "Cold",
+        "Cold",
+    ]
+
+
+def test_a_population_too_small_to_say_who_is_unusual_gets_no_label():
+    """Nineteen players is too few: no thresholds, so no label (the score itself is still given)."""
+    assert label_thresholds([float(n) for n in range(1, 20)]) is None
+    assert trend_label(5.0, None) is None
+    season, window = _crossing_points()
+    trend = _trend(season, window, 1)
+    assert trend.has_trend is True and trend.overall is not None and trend.label is None
+
+
+def test_labels_follow_the_leagues_spread_not_a_fixed_number():
+    """Twenty players, equal all season; in the window player n scores n points a game.
+
+    The overall trend then rises with n, so the top tenth (players 19 and 20) are Hot and the
+    bottom tenth (players 1 and 2) are Cold, whatever the size of the numbers.
+    """
+    players = range(1, 21)
+    season = make_stats(**{f"p{n}": {"pts": 10.0, "games": 20} for n in players})
+    window = make_stats(**{f"p{n}": {"pts": float(n), "games": 5} for n in players})
+
+    trends = score_trends(season, window, 14, list(players))
+    labels = {t.player_id: t.label for t in trends}
+
+    assert [n for n in players if labels[n] == "Hot"] == [19, 20]
+    assert [n for n in players if labels[n] == "Cold"] == [1, 2]
+    assert [n for n in players if labels[n] == "Steady"] == list(range(3, 19))
 
 
 def _moves():
@@ -155,10 +202,10 @@ def _moves():
 
 
 def test_the_reason_names_the_two_biggest_movers_and_a_big_minutes_change():
-    """By size of z change: PTS (2.4) and TO (-1.5, turnovers up 1.0), then minutes +6.0."""
+    """By size of z change: PTS (2.4) and TO (-1.5, turnovers up by 1.0), then minutes +6.0."""
     reason = build_reason(_moves(), minutes_change=6.0, window_days=14)
 
-    assert reason == "PTS +20.0, TO +1.0 over the last 14 days; minutes +6.0"
+    assert reason == "PTS +20.0, 1.0 more TO over the last 14 days; minutes +6.0"
 
 
 @pytest.mark.parametrize(
@@ -172,8 +219,19 @@ def test_the_reason_names_the_two_biggest_movers_and_a_big_minutes_change():
         ),
         (_moves()[3:], 0.0, "No notable change over the last 14 days"),
         (_moves()[3:], -4.5, "Minutes -4.5 over the last 14 days"),
+        (
+            [CategoryTrend("tov", "TO", z_change=1.7, change=-1.1)],
+            0.0,
+            "1.1 fewer TO over the last 14 days",
+        ),
     ],
-    ids=["small minutes left out", "percentage in points", "nothing notable", "minutes only"],
+    ids=[
+        "small minutes left out",
+        "percentage in points",
+        "nothing notable",
+        "minutes only",
+        "fewer turnovers",
+    ],
 )
 def test_the_reason_leaves_out_what_is_small(moves, minutes, expected):
     """Moves under 0.25 standard deviations and minutes changes under 3.0 are not worth a word."""

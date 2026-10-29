@@ -20,7 +20,7 @@ def test_trends_page_shows_a_card_for_each_roster_player(make_client, seed, rost
     html = make_client().get("/trends?window=7").text
 
     assert "Ada One" in html and "Di Four" in html and "Cy Three" not in html
-    assert "Steady" in html
+    assert not any(word in html for word in ("Hot", "Cold", "Steady"))  # too few players to label
     assert "PTS +9.0 over the last 7 days" in html
     assert "7 games in the last 7 days" in html and "10 this season" in html
     assert "+0.4" in html

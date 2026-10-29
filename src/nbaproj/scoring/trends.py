@@ -19,16 +19,20 @@ MIN_SEASON_GAMES = 5
 MIN_WINDOW_GAMES = 2
 # Fewer window games than this and the trend is given but flagged as a low sample.
 LOW_SAMPLE_GAMES = 3
-# The overall trend (the sum over the nine categories) at or beyond these is Hot or Cold.
-# First guesses, to be checked against real data and tuned there.
-HOT_AT = 2.0
-COLD_AT = -2.0
+# Hot and Cold are the top and bottom tenth of the league by overall trend (the sum over the
+# nine categories), not fixed numbers: measured on a full real season, a fixed cut-off labelled
+# a quarter of the league at 7 days and almost nobody at 30 days early in the season, because
+# the spread of scores changes with the window and the date. With fewer qualifying players than
+# MIN_LABEL_POPULATION there is no "unusual" to speak of, so no label is given.
+TAIL_SHARE = 0.10
+MIN_LABEL_POPULATION = 20
 # What is worth a word in a reason sentence.
 MIN_MOVER_Z = 0.25
 BIG_MINUTES_CHANGE = 3.0
 MOVERS_SHOWN = 2
 HOT, COLD, STEADY = "Hot", "Cold", "Steady"
 PERCENTAGE_KEYS = frozenset(c.key for c in CATEGORIES if c.shown.endswith("_pct"))
+NEGATED_KEYS = frozenset(c.key for c in CATEGORIES if c.negated)
 
 
 @dataclass(frozen=True)
@@ -62,11 +66,26 @@ class PlayerTrend:
     label: str | None = None
 
 
-def trend_label(overall: float) -> str:
-    """Hot at or above ``HOT_AT``, Cold at or below ``COLD_AT``, otherwise Steady."""
-    if overall >= HOT_AT:
+def label_thresholds(overalls: Sequence[float]) -> tuple[float, float] | None:
+    """The overall scores at and beyond which a player is Hot and Cold, or None.
+
+    They are the 90th and 10th percentiles of ``overalls`` (every qualifying player's
+    overall trend); with fewer than ``MIN_LABEL_POPULATION`` players there are none.
+    """
+    if len(overalls) < MIN_LABEL_POPULATION:
+        return None
+    scores = pd.Series(list(overalls))
+    return float(scores.quantile(1 - TAIL_SHARE)), float(scores.quantile(TAIL_SHARE))
+
+
+def trend_label(overall: float, thresholds: tuple[float, float] | None) -> str | None:
+    """Hot at or above the upper threshold, Cold at or below the lower, otherwise Steady."""
+    if thresholds is None:
+        return None
+    hot_at, cold_at = thresholds
+    if overall >= hot_at:
         return HOT
-    if overall <= COLD_AT:
+    if overall <= cold_at:
         return COLD
     return STEADY
 
@@ -76,6 +95,9 @@ def _games_text(count: int) -> str:
 
 
 def _change_text(category: CategoryTrend, change: float) -> str:
+    if category.key in NEGATED_KEYS:
+        # "TO -1.1" would read as bad news; fewer turnovers are good news.
+        return f"{abs(change):.1f} {'fewer' if change < 0 else 'more'} {category.label}"
     if category.key in PERCENTAGE_KEYS:
         return f"{category.label} {change * 100:+.1f} pts"
     return f"{category.label} {change:+.1f}"
@@ -139,6 +161,7 @@ class _Periods:
     z_season: pd.DataFrame
     z_window: pd.DataFrame
     window_days: int
+    thresholds: tuple[float, float] | None
 
 
 def _player_trend(player_id: int, periods: _Periods) -> PlayerTrend:
@@ -172,7 +195,7 @@ def _player_trend(player_id: int, periods: _Periods) -> PlayerTrend:
         minutes_change=minutes_change,
         usage_change=_difference(window.loc[player_id, "usage"], season.loc[player_id, "usage"]),
         overall=overall,
-        label=trend_label(overall),
+        label=trend_label(overall, periods.thresholds),
     )
 
 
@@ -186,11 +209,10 @@ def score_trends(
     with too few games in either period gets no trend and a plain reason. Inputs are not
     modified.
     """
+    z_season = z_scores(season, MIN_SEASON_GAMES)
+    z_window = z_scores(window, MIN_WINDOW_GAMES)
+    everyone = (z_window - z_season).sum(axis=1, skipna=False).dropna()
     periods = _Periods(
-        season,
-        window,
-        z_scores(season, MIN_SEASON_GAMES),
-        z_scores(window, MIN_WINDOW_GAMES),
-        window_days,
+        season, window, z_season, z_window, window_days, label_thresholds(everyone.tolist())
     )
     return [_player_trend(player_id, periods) for player_id in player_ids]
