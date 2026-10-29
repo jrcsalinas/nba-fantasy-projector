@@ -72,6 +72,34 @@ changes" for the history of every add and remove. Search and edits update in pla
 a small bundled script (htmx). The search box needs JavaScript; the Add and Remove
 buttons also work as plain form posts that reload the page.
 
+## Trends
+
+**Trends** (`/trends`, linked from the home and roster pages) shows how each player on your
+roster is doing lately compared with his own season. Pick 7, 14 or 30 days at the top
+(the default is 14). The window counts calendar days, in `APP_TIMEZONE`, ending on the
+latest game day in the data, so an off day does not empty the page.
+
+Each card shows:
+
+- **A score and a label.** The score is the sum of nine category trends. **Hot** is the top
+  tenth of all players by that score, **Cold** the bottom tenth, **Steady** the rest. With
+  fewer than 20 players to compare (very early in a season) there is no label.
+- **One sentence** naming the two biggest movers and a big minutes change, for example
+  "AST +2.1, REB +1.4 over the last 14 days; minutes +6.0". Turnovers read "1.1 fewer TO",
+  because fewer is better.
+- **The nine categories** (PTS, REB, AST, STL, BLK, 3PM, TO, FG%, FT%), each with the plain
+  change per game and a z-score: how many standard deviations the recent form sits above or
+  below the average player, minus the same for his whole season. FG% and FT% are scored by
+  impact (made shots above what an average player makes on the same attempts), so volume
+  counts; their plain change is in percentage points.
+- **Minutes and usage change**, and how many games the numbers rest on.
+
+A player with too few games shows "No trend" and why ("only 1 game in the last 7 days", "no
+games this season"). Under 3 games in the window the card says **Low sample: read with care**.
+Everyone with enough games is scored, not only your roster, because the z-scores are measured
+against all players. The page needs game data: load a season with the backfill command above,
+or wait for the daily refresh.
+
 ## Refreshing the data
 
 Every signed-in page has a banner at the top: when the data was last checked, "Refreshing
