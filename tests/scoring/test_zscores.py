@@ -69,15 +69,17 @@ def test_players_under_the_minimum_games_get_no_score_and_do_not_shift_the_other
     assert z.loc[4].isna().all()
 
 
-@pytest.mark.parametrize("min_games", [1, 50])
-def test_an_empty_population_gives_an_empty_result(min_games):
-    """No players, or nobody with enough games: the nine columns and no scores."""
-    nobody = make_stats()
-    one_game = make_stats(p1={"pts": 5.0, "games": 1})
+def test_an_empty_population_gives_an_empty_result():
+    """No players: the nine columns and no rows."""
+    z = z_scores(make_stats(), min_games=1)
 
-    z_empty = z_scores(nobody, min_games=min_games)
-    z_short = z_scores(one_game, min_games=50)
+    assert list(z.columns) == KEYS and z.empty
 
-    assert list(z_empty.columns) == KEYS and z_empty.empty
-    assert list(z_short.columns) == KEYS and z_short.isna().all().all()
-    assert math.isnan(z_short.loc[1, "pts"])
+
+def test_nobody_with_enough_games_gives_all_missing_scores():
+    """A player under the minimum is not scored: every column is NaN, none is zero."""
+    z = z_scores(make_stats(p1={"pts": 5.0, "games": 1}), min_games=50)
+
+    assert list(z.columns) == KEYS
+    assert z.isna().all().all()
+    assert math.isnan(z.loc[1, "pts"])

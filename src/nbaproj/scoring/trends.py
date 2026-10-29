@@ -67,7 +67,7 @@ class PlayerTrend:
 
 
 def label_thresholds(overalls: Sequence[float]) -> tuple[float, float] | None:
-    """The overall scores at and beyond which a player is Hot and Cold, or None.
+    """The overall scores beyond which a player is Hot and Cold, or None.
 
     They are the 90th and 10th percentiles of ``overalls`` (every qualifying player's
     overall trend); with fewer than ``MIN_LABEL_POPULATION`` players there are none.
@@ -79,18 +79,23 @@ def label_thresholds(overalls: Sequence[float]) -> tuple[float, float] | None:
 
 
 def trend_label(overall: float, thresholds: tuple[float, float] | None) -> str | None:
-    """Hot at or above the upper threshold, Cold at or below the lower, otherwise Steady."""
+    """Hot above the upper threshold, Cold below the lower, otherwise Steady.
+
+    Strictly above and below, so players who share a threshold value (many identical scores,
+    as early in a season) are not all labelled: at most a tenth of the league can be beyond it.
+    """
     if thresholds is None:
         return None
     hot_at, cold_at = thresholds
-    if overall >= hot_at:
+    if overall > hot_at:
         return HOT
-    if overall <= cold_at:
+    if overall < cold_at:
         return COLD
     return STEADY
 
 
-def _games_text(count: int) -> str:
+def games_text(count: int) -> str:
+    """"1 game" or "3 games"."""
     return f"{count} game" if count == 1 else f"{count} games"
 
 
@@ -133,11 +138,11 @@ def _missing_reason(season_games: int, window_games: int, window_days: int) -> s
     if season_games == 0:
         return "no games this season"
     if season_games < MIN_SEASON_GAMES:
-        return f"only {_games_text(season_games)} this season"
+        return f"only {games_text(season_games)} this season"
     if window_games == 0:
         return f"no games in the last {window_days} days"
     if window_games < MIN_WINDOW_GAMES:
-        return f"only {_games_text(window_games)} in the last {window_days} days"
+        return f"only {games_text(window_games)} in the last {window_days} days"
     return None
 
 

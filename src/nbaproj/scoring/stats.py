@@ -41,6 +41,11 @@ STAT_COLUMNS = [
 ]
 
 
+def empty_period_stats() -> pd.DataFrame:
+    """The stats of a period in which nobody played: every column, no players."""
+    return pd.DataFrame(columns=STAT_COLUMNS, index=pd.Index([], name="player_id"))
+
+
 def _league_percentage(made: pd.Series, attempted: pd.Series) -> float:
     total = attempted.sum()
     return float(made.sum() / total) if total else 0.0
@@ -63,7 +68,7 @@ def period_stats(logs: pd.DataFrame, start: date, end: date) -> pd.DataFrame:
     """
     period = logs[(logs["game_day"] >= start) & (logs["game_day"] <= end)]
     if period.empty:
-        return pd.DataFrame(columns=STAT_COLUMNS, index=pd.Index([], name="player_id"))
+        return empty_period_stats()
     by_player = period.groupby("player_id")
     games = by_player.size()
     totals = by_player[list(SHOT_COLUMNS)].sum()

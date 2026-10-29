@@ -5,7 +5,7 @@ import math
 import pandas as pd
 from pandas.testing import assert_frame_equal
 
-from nbaproj.scoring.stats import period_stats
+from nbaproj.scoring.stats import STAT_COLUMNS, empty_period_stats, period_stats
 from tests.scoring.conftest import day, make_logs
 
 
@@ -107,3 +107,12 @@ def test_period_stats_do_not_modify_their_input():
 
     assert_frame_equal(logs, before)
     assert isinstance(logs, pd.DataFrame)
+
+
+def test_the_empty_stats_frame_has_every_column_and_no_players():
+    """What a period with no games, or a database with no games, looks like."""
+    empty = empty_period_stats()
+
+    assert list(empty.columns) == STAT_COLUMNS
+    assert empty.empty and empty.index.name == "player_id"
+    assert period_stats(make_logs({"player_id": 1, "day": 1}), day(5), day(6)).equals(empty)

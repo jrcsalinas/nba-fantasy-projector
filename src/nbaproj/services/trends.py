@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from nbaproj.db.models import Game, GameLog
 from nbaproj.roster.service import RosterService
-from nbaproj.scoring.stats import LOG_COLUMNS, period_stats
+from nbaproj.scoring.stats import LOG_COLUMNS, empty_period_stats, period_stats
 from nbaproj.scoring.trends import PlayerTrend, score_trends
 
 # What is read from the database; the local game day is worked out from the tip-off.
@@ -79,8 +79,7 @@ def load_trends(
     ids = [player.player_id for player in players]
     latest = _latest_game(session)
     if latest is None:
-        no_stats = period_stats(pd.DataFrame(columns=list(LOG_COLUMNS)), date.min, date.max)
-        trends = score_trends(no_stats, no_stats, window_days, ids)
+        trends = score_trends(empty_period_stats(), empty_period_stats(), window_days, ids)
         season, last_day = None, None
     else:
         season = latest.season

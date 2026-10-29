@@ -155,14 +155,8 @@ def test_label_thresholds_are_the_top_and_bottom_tenth_of_the_population():
     thresholds = label_thresholds([float(n) for n in range(1, 21)])
 
     assert thresholds == pytest.approx((18.1, 2.9))
-    assert [trend_label(x, thresholds) for x in (19.0, 18.1, 18.0, 3.0, 2.9, 1.0)] == [
-        "Hot",
-        "Hot",
-        "Steady",
-        "Steady",
-        "Cold",
-        "Cold",
-    ]
+    labels = [trend_label(x, thresholds) for x in (19.0, 18.2, 18.0, 3.0, 2.8)]
+    assert labels == ["Hot", "Hot", "Steady", "Steady", "Cold"]
 
 
 def test_a_population_too_small_to_say_who_is_unusual_gets_no_label():
@@ -190,6 +184,57 @@ def test_labels_follow_the_leagues_spread_not_a_fixed_number():
     assert [n for n in players if labels[n] == "Hot"] == [19, 20]
     assert [n for n in players if labels[n] == "Cold"] == [1, 2]
     assert [n for n in players if labels[n] == "Steady"] == list(range(3, 19))
+
+
+def _labels(trends):
+    return {t.player_id: t.label for t in trends}
+
+
+def test_a_league_where_nobody_stands_out_labels_nobody():
+    """Twenty-five identical players share every threshold, so none is beyond it: all Steady."""
+    same = make_stats(**{f"p{n}": {"pts": 10.0, "games": 20} for n in range(1, 26)})
+
+    labels = _labels(score_trends(same, same, 14, list(range(1, 26))))
+
+    assert set(labels.values()) == {"Steady"}
+
+
+def test_a_threshold_shared_by_many_players_does_not_label_them_all():
+    """22 players hold at 10 points and three rise to 20, 30 and 40 (season z is zero for all).
+
+    The 10th percentile sits on the 22 tied players, so nobody is below it: no Cold. The
+    90th percentile falls between the tied group and the 20-point player: the three risers
+    are Hot and everyone else Steady, instead of 22 of 25 players being called Cold.
+    """
+    season = make_stats(**{f"p{n}": {"pts": 10.0, "games": 20} for n in range(1, 26)})
+    window = make_stats(
+        **{f"p{n}": {"pts": 10.0 + 10.0 * max(0, n - 22), "games": 5} for n in range(1, 26)}
+    )
+
+    labels = _labels(score_trends(season, window, 14, list(range(1, 26))))
+
+    assert [n for n, label in labels.items() if label == "Hot"] == [23, 24, 25]
+    assert "Cold" not in labels.values()
+
+
+def test_players_scored_in_only_one_period_are_left_out_of_the_label_population():
+    """Five extra players have window games but no season at all, so they have no overall.
+
+    Counting them as zeros would pull both thresholds toward zero and label a third player
+    Hot (players 18, 19 and 20) and a third Cold (1, 2 and 3). They must not count: the top
+    tenth of the twenty who have an overall is players 19 and 20, the bottom tenth 1 and 2.
+    """
+    base = range(1, 21)
+    season = make_stats(**{f"p{n}": {"pts": 10.0, "games": 20} for n in base})
+    window = make_stats(
+        **{f"p{n}": {"pts": float(n), "games": 5} for n in base},
+        **{f"p{n}": {"pts": 10.5, "games": 5} for n in range(21, 26)},
+    )
+
+    labels = _labels(score_trends(season, window, 14, list(base)))
+
+    assert [n for n in base if labels[n] == "Hot"] == [19, 20]
+    assert [n for n in base if labels[n] == "Cold"] == [1, 2]
 
 
 def _moves():
