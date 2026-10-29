@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Trends{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Trends</h1>
+  <nav class="windows" aria-label="Time window">
+    {% for days in windows %}<a href="/trends?window={{ days }}"{% if days == view.window_days %} aria-current="page"{% endif %}>{{ days }} days</a>{% endfor %}
+  </nav>
+  {% if not cards %}
+  <p class="muted">Add players to your roster first. <a href="/roster">My roster</a></p>
+  {% elif not view.has_data %}
+  <p class="muted">No game data yet. Refresh once the first games are final.</p>
+  {% else %}
+  <p class="muted">Data through {{ data_through }} ({{ view.season }} season). Each number compares the last {{ view.window_days }} days with the player's whole season, against all players.</p>
+  {% for card in cards %}
+  <section class="trend-card">
+    <h2>{{ card.name }}{% if card.has_trend %} <span class="badge badge-{{ card.tone }}">{{ card.label }} {{ card.overall }}</span>{% endif %}</h2>
+    {% if card.has_trend %}
+    <p>{{ card.reason }}</p>
+    <p class="muted">{{ card.minutes }} &middot; {{ card.usage }}</p>
+    <ul class="cats">
+      {% for cell in card.cells %}
+      <li class="cat cat-{{ cell.tone }}"><span class="cat-label">{{ cell.label }}</span> <span>{{ cell.change }}</span> <span class="muted">z {{ cell.z_change }}</span></li>
+      {% endfor %}
+    </ul>
+    <p class="muted">{{ card.games }}{% if card.low_sample %} &middot; <strong>Low sample: read with care</strong>{% endif %}</p>
+    {% else %}
+    <p class="muted">No trend: {{ card.reason }}</p>
+    {% endif %}
+  </section>
+  {% endfor %}
+  {% endif %}
+  <p class="muted"><a href="/">Back to the start</a></p>
+</div>
+{% endblock %}

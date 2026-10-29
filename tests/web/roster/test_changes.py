@@ -70,10 +70,10 @@ def test_adding_someone_already_there_is_a_message_not_an_error(roster_client, s
 
 def test_an_unknown_player_id_is_a_generic_404(roster_client, engine):
     """An id the directory does not know is a plain not-found page that explains nothing."""
-    response = _htmx_post(roster_client, "/roster/add", player_id="999")
+    response = _htmx_post(roster_client, "/roster/add", player_id="7654321")
 
     assert response.status_code == 404
-    assert "999" not in response.text and "UnknownPlayer" not in response.text
+    assert "7654321" not in response.text and "UnknownPlayer" not in response.text
     assert _count(engine, RosterEntry) == 0
 
 

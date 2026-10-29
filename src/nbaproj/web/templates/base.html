@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}NBA Fantasy Projector{% endblock %}</title>
   <style>
-    :root { color-scheme: light dark; --fg: #1a1a1a; --bg: #fafafa; --muted: #666; --accent: #1d4ed8; --card: #fff; --line: #d9d9d9; }
-    @media (prefers-color-scheme: dark) { :root { --fg: #ececec; --bg: #161616; --muted: #9a9a9a; --accent: #7aa2ff; --card: #1f1f1f; --line: #333; } }
+    :root { color-scheme: light dark; --fg: #1a1a1a; --bg: #fafafa; --muted: #666; --accent: #1d4ed8; --card: #fff; --line: #d9d9d9; --good: #0a7d33; --bad: #b00020; }
+    @media (prefers-color-scheme: dark) { :root { --fg: #ececec; --bg: #161616; --muted: #9a9a9a; --accent: #7aa2ff; --card: #1f1f1f; --line: #333; --good: #4ade80; --bad: #ff8a8a; } }
     body { margin: 0; font: 16px/1.5 system-ui, sans-serif; color: var(--fg); background: var(--bg); }
     main { max-width: 40rem; margin: 2rem auto; padding: 0 1rem; }
     .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 1.5rem; }
@@ -25,6 +25,16 @@
     .banner { margin: 0 0 1rem; padding: .5rem .75rem; border: 1px solid var(--line); border-radius: 8px; background: var(--card); font-size: .9rem; }
     .banner-failed, .banner-stale { border-color: #b00020; }
     .banner p { margin: .25rem 0 0; }
+    .windows { display: flex; gap: .5rem; margin: 0 0 1rem; }
+    .windows a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 1rem; border: 1px solid var(--line); border-radius: 8px; text-decoration: none; }
+    .windows a[aria-current="page"] { border-color: var(--accent); font-weight: 600; }
+    .trend-card { border-top: 1px solid var(--line); padding: .75rem 0; }
+    .trend-card h2 { margin: 0 0 .25rem; display: flex; justify-content: space-between; align-items: center; gap: .5rem; }
+    .badge { font-size: .85rem; font-weight: 600; padding: .1rem .5rem; border-radius: 1rem; border: 1px solid var(--line); }
+    .badge-up, .cat-up { color: var(--good); }
+    .badge-down, .cat-down { color: var(--bad); }
+    ul.cats { list-style: none; padding: 0; margin: .5rem 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr)); gap: .25rem .75rem; }
+    .cat-label { font-weight: 600; display: inline-block; min-width: 2.6rem; }
     .banner form { margin: 0; }
     .banner button { margin-top: .5rem; }
   </style>

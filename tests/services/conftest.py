@@ -56,6 +56,24 @@ class Seeder:
             self.game(lines_for_day(day), tip_off, season)
 
 
+def three_players(seed):
+    """Ten game days. Points: player 1 scores 0 on days 1 to 3 then 30; player 2 20; player 3 10.
+
+    Season (10 games): averages 21, 20, 10, mean 17, population standard deviation
+    sqrt(74 / 3) = 4.9666: z 0.8054, 0.6040, -1.4094.
+    Last 7 days (days 4 to 10): averages 30, 20, 10: mean 20, standard deviation 8.165:
+    z 1.2247, 0, -1.2247. Player 1's points trend is 1.2247 - 0.8054 = 0.4193.
+    """
+    seed.daily(
+        range(1, 11),
+        lambda d: {
+            1: {"pts": 0 if d <= 3 else 30},
+            2: {"pts": 20},
+            3: {"pts": 10},
+        },
+    )
+
+
 @pytest.fixture(name="seed")
 def seed_fixture(session) -> Seeder:
     """A seeder on the shared in-memory database."""

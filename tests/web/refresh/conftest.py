@@ -18,8 +18,14 @@ NOW = datetime(2026, 10, 29, 12, 0, tzinfo=timezone.utc)
 HOUR = timedelta(hours=1)
 
 
+@pytest.fixture(name="directory")
+def directory_fixture() -> PlayerDirectory:
+    """The players the app can find by name; a folder of tests may override it."""
+    return PlayerDirectory([(1, "A B")])
+
+
 @pytest.fixture(name="make_client")
-def make_client_fixture(web_env, engine, scoreboard_payload):
+def make_client_fixture(web_env, engine, scoreboard_payload, directory):
     """A factory for clients of an app with a database, the clock fixed at NOW, and no network.
 
     The NBA client is a fake with an empty scoreboard, so a refresh that a test starts by
@@ -29,7 +35,7 @@ def make_client_fixture(web_env, engine, scoreboard_payload):
 
         def make(signed_in: bool = True, **env_overrides: str) -> TestClient:
             settings = load_web_settings({**web_env, **env_overrides})
-            app = create_app(settings, engine=engine, directory=PlayerDirectory([(1, "A B")]))
+            app = create_app(settings, engine=engine, directory=directory)
             app.state.clock = lambda: NOW
             app.state.nba_client = FakeClient(only_games(scoreboard_payload), {})
             client = stack.enter_context(TestClient(app))
