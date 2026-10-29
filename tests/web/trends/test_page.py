@@ -21,10 +21,12 @@ def test_trends_page_shows_a_card_for_each_roster_player(make_client, seed, rost
 
     assert "Ada One" in html and "Di Four" in html and "Cy Three" not in html
     assert not any(word in html for word in ("Hot", "Cold", "Steady"))  # too few players to label
-    assert "PTS +9.0 over the last 7 days" in html
-    assert "7 games in the last 7 days" in html and "10 this season" in html
-    assert "+0.4" in html
-    assert "No trend: no games this season" in html
+    ada = html.split("<h2>Ada One")[1].split("</section>")[0]
+    assert "PTS +9.0 over the last 7 days" in ada
+    assert "7 games in the last 7 days" in ada and "10 this season" in ada
+    assert "+0.4" in ada
+    di = html.split("<h2>Di Four")[1].split("</section>")[0]
+    assert "No trend: no games this season" in di
 
 
 def test_the_default_window_is_14_days_and_the_links_choose_7_14_and_30(

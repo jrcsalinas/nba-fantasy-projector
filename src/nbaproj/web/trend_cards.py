@@ -3,7 +3,14 @@
 from dataclasses import dataclass
 
 from nbaproj.scoring.categories import CATEGORIES
-from nbaproj.scoring.trends import COLD, HOT, MIN_MOVER_Z, PERCENTAGE_KEYS, CategoryTrend
+from nbaproj.scoring.trends import (
+    COLD,
+    HOT,
+    MIN_MOVER_Z,
+    PERCENTAGE_KEYS,
+    CategoryTrend,
+    games_text,
+)
 from nbaproj.services.trends import TrendRow, TrendsView
 
 UP, DOWN, FLAT = "up", "down", "flat"
@@ -45,16 +52,17 @@ def _tone(z_change: float) -> str:
     return FLAT
 
 
-def _games_text(count: int) -> str:
-    return f"{count} game" if count == 1 else f"{count} games"
+def _signed(value: float) -> str:
+    """One decimal with a sign; a value that rounds to zero is +0.0, never the noise of -0.0."""
+    return f"{round(value, 1) + 0.0:+.1f}"
 
 
 def _change_text(category: CategoryTrend) -> str:
     if category.change is None:
         return NOT_KNOWN
     if category.key in PERCENTAGE_KEYS:
-        return f"{category.change * 100:+.1f} pts"
-    return f"{category.change:+.1f}"
+        return f"{_signed(category.change * 100)} pts"
+    return _signed(category.change)
 
 
 def _label_tone(label: str) -> str:
@@ -63,12 +71,12 @@ def _label_tone(label: str) -> str:
 
 def _card(row: TrendRow, window_days: int) -> Card:
     trend = row.trend
-    if not trend.has_trend:
+    if not trend.has_trend or trend.overall is None or trend.minutes_change is None:
         return Card(row.name, has_trend=False, reason=trend.reason)
     usage = (
         "Usage unknown"
         if trend.usage_change is None
-        else f"Usage {trend.usage_change:+.1f} pts"
+        else f"Usage {_signed(trend.usage_change)} pts"
     )
     by_key = {category.key: category for category in trend.categories}
     return Card(
@@ -77,19 +85,19 @@ def _card(row: TrendRow, window_days: int) -> Card:
         reason=trend.reason,
         tone=_label_tone(trend.label or ""),
         label=trend.label or "",
-        overall=f"{trend.overall or 0.0:+.1f}",
+        overall=_signed(trend.overall),
         games=(
-            f"{_games_text(trend.window_games)} in the last {window_days} days"
+            f"{games_text(trend.window_games)} in the last {window_days} days"
             f" · {trend.season_games} this season"
         ),
-        minutes=f"Minutes {trend.minutes_change or 0.0:+.1f}",
+        minutes=f"Minutes {_signed(trend.minutes_change)}",
         usage=usage,
         low_sample=trend.low_sample,
         cells=tuple(
             Cell(
                 label=c.label,
                 change=_change_text(by_key[c.key]),
-                z_change=f"{by_key[c.key].z_change:+.1f}",
+                z_change=_signed(by_key[c.key].z_change),
                 tone=_tone(by_key[c.key].z_change),
             )
             for c in CATEGORIES
